@@ -208,9 +208,9 @@ BOOL IsValidTCO(HANDLE hProcess, PTP_CALLBACK_OBJECT tco) {
     if (res != sizeof(mbi)) return FALSE;
     if (!(mbi.Protect & PAGE_READWRITE)) return FALSE;
 
-    // the callback function should reside in read+executable memory
+    // the caller function should reside in read+executable memory
     res = VirtualQueryEx(hProcess, 
-      (LPCVOID)tco->Callback.Function, &mbi, sizeof(mbi));
+      (LPCVOID)tco->CallerAddress.Function, &mbi, sizeof(mbi));
       
     if (res != sizeof(mbi)) return FALSE;
     if (!(mbi.Protect & PAGE_EXECUTE_READ)) return FALSE;
