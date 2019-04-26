@@ -1,0 +1,4 @@
+TvCompareFunc
+FindExport
+xGetProcAddress
+xstrcmp

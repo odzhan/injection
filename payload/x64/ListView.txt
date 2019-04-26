@@ -1,0 +1,4 @@
+Pfnlvgroupcompare
+FindExport
+xGetProcAddress
+xstrcmp

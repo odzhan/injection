@@ -1,0 +1,4 @@
+Editwordbreakproca
+FindExport
+xGetProcAddress
+xstrcmp

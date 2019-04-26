@@ -1,0 +1,4 @@
+Editstreamcallback
+FindExport
+xGetProcAddress
+xstrcmp

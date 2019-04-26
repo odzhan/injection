@@ -1,0 +1,4 @@
+OleGetClipboardData
+FindExport
+xGetProcAddress
+xstrcmp

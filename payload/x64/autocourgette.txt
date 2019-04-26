@@ -1,0 +1,4 @@
+Autocorrectproc
+FindExport
+xGetProcAddress
+xstrcmp

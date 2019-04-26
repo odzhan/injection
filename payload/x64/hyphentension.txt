@@ -1,0 +1,4 @@
+HyphenateProc
+FindExport
+xGetProcAddress
+xstrcmp
