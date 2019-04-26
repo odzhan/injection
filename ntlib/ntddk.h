@@ -5,7 +5,8 @@
 extern "C" {
 #endif
 #include <Windows.h>
-
+#include <richedit.h>
+#include <objidl.h>
 #ifdef _NTDDK_
 #error This header cannot be compiled together with NTDDK
 #endif

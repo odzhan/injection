@@ -35,25 +35,56 @@ typedef UINT (WINAPI *WinExec_t)(
 LPVOID xGetProcAddress(LPVOID pszAPI);
 int xstrcmp(char*,char*);
 
-#ifdef WINDOW // Extra Window Bytes
+#ifdef WINDOW        // Extra Window Bytes
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, 
   WPARAM wParam, LPARAM lParam)
 #endif
   
-#ifdef SVCCTRL // Service Control Handler
+#ifdef SVCCTRL       // Service Control Handler
 DWORD Handler(DWORD dwControl)
 #endif
 
-#ifdef SUBCLASS // PROPagate
+#ifdef SUBCLASS      // PROPagate
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
   LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 #endif
 
-#ifdef CONSOLE // ConsoleWindowClass
+#ifdef WORDBREAK     // WordWarping
+int Editwordbreakproca(LPSTR lpch, int ichCurrent, int cch, int code)
+#endif
+
+#ifdef HYPHENATE     // Hyphentension
+void HyphenateProc(WCHAR *pszWord, LANGID langid, long ichExceed, 
+  HYPHRESULT *phyphresult)
+#endif
+
+#ifdef AUTOCORRECT   // AutoCourgette
+int Autocorrectproc(LANGID langid, const WCHAR *pszBefore, 
+  WCHAR *pszAfter, LONG cchAfter, LONG *pcchReplaced)
+#endif
+
+#ifdef STREAM        // Streamception
+DWORD Editstreamcallback(DWORD_PTR dwCookie, LPBYTE pbBuff,
+  LONG cb, LONG *pcb)
+#endif
+
+#ifdef CLIPBOARD     // IRichEditOle::GetClipboardData method
+HRESULT OleGetClipboardData(CHARRANGE *lpchrg, DWORD reco, LPDATAOBJECT *lplpdataobj)
+#endif
+
+#ifdef LVCOMPARE     // ListPlanting
+int Pfnlvgroupcompare(int Arg1, int Arg2, void *ptr)
+#endif
+
+#ifdef TVCOMPARE     // TreePoline / TVSORTCB structure
+int CALLBACK TvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+#endif
+
+#ifdef CONSOLE       // ConsoleWindowClass
 HWND GetWindowHandle(VOID)
 #endif
 
-#ifdef ALPC // Advanced Local Procedure Call (ALPC)
+#ifdef ALPC          // Advanced Local Procedure Call (ALPC)
 VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance, 
   LPVOID Context, PTP_ALPC TpAlpc, LPVOID Reserved) 
 #endif
@@ -72,6 +103,7 @@ VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance,
       TpAlpc->CallbackObject.Callback.Function = tp->Function;
       TpAlpc->CallbackObject.Callback.Context  = tp->Context;
     #endif
+    
     // now call WinExec to start notepad
     szWinExec[0] = *(DWORD*)"WinE";
     szWinExec[1] = *(DWORD*)"xec\0";
@@ -90,8 +122,13 @@ VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance,
       pLrpcIoComplete(Instance, TpAlpc->CallbackObject.Callback.Context, TpAlpc, Reserved);
     #endif
     
-    #ifndef ALPC
-    return 0;
+    // for EM_STREAMIN, indicate an error.
+    #if defined(STREAM)
+      return (DWORD)~0UL;
+    #endif
+    
+    #if !defined(ALPC) && !defined(HYPHENATE)
+      return 0;
     #endif
 }
 

@@ -40,6 +40,7 @@
 #include <shlwapi.h>
 #include <stdio.h>
 #include <dbghelp.h>
+#include <richedit.h>
 
 #include "../NTlib/nttpp.h"
 

@@ -26,3 +26,38 @@ link /order:@alpc.txt /entry:TpAlpcCallBack /base:0 payload.obj -subsystem:conso
 xbin payload.exe .text
 copy payload.exe64.bin ..\..\alpc\payload.bin
 move payload.exe64.bin ..\..\spooler\payload.bin
+echo.
+cl -DWORDBREAK -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@wordwarping.txt /entry:Editwordbreakproca /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\wordbreak.bin
+echo.
+cl -DHYPHENATE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@hyphentension.txt /entry:HyphenateProc /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\hyphenate.bin
+echo.
+cl -DAUTOCORRECT -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@autocourgette.txt /entry:Autocorrectproc /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\autocorrect.bin
+echo.
+cl -DSTREAM -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@streamception.txt /entry:Editstreamcallback /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\stream.bin
+echo.
+cl -DCLIPBOARD -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@clipboard.txt /entry:OleGetClipboardData /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\clipboard.bin
+echo.
+cl -DLVCOMPARE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@listview.txt /entry:Pfnlvgroupcompare /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\listview.bin
+echo.
+cl -DTVCOMPARE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@treeview.txt /entry:TvCompareFunc /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\richedit\treeview.bin
