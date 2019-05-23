@@ -11,9 +11,7 @@ VOID ScanProcess(DWORD pid) {
     
     hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
     
-    // if process opened
     if (hProcess != NULL) {
-      // get memory info
       GetSystemInfo(&si);
       
       for (addr=0; addr < (LPBYTE)si.lpMaximumApplicationAddress;) {
