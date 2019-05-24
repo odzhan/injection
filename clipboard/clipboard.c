@@ -10,8 +10,8 @@ typedef struct _IUnknown_t {
     // a pointer to virtual function table
     ULONG_PTR lpVtbl;
     // the virtual function table
-    ULONG_PTR AddRef;
     ULONG_PTR QueryInterface;
+    ULONG_PTR AddRef;
     ULONG_PTR Release;       // executed for WM_DESTROYCLIPBOARD
 } IUnknown_t;
 
