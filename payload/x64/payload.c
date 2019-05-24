@@ -84,6 +84,10 @@ int CALLBACK TvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 HWND GetWindowHandle(VOID)
 #endif
 
+#ifdef RELEASE       // Release method
+VOID Release(VOID *This)
+#endif
+
 #ifdef ALPC          // Advanced Local Procedure Call (ALPC)
 VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance, 
   LPVOID Context, PTP_ALPC TpAlpc, LPVOID Reserved) 
@@ -127,7 +131,7 @@ VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance,
       return (DWORD)~0UL;
     #endif
     
-    #if !defined(ALPC) && !defined(HYPHENATE)
+    #if !defined(ALPC) && !defined(HYPHENATE) && !defined(RELEASE)
       return 0;
     #endif
 }

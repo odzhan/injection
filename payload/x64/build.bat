@@ -61,3 +61,8 @@ cl -DTVCOMPARE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
 link /order:@treeview.txt /entry:TvCompareFunc /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
 xbin payload.exe .text
 move payload.exe64.bin ..\..\richedit\treeview.bin
+echo.
+cl -DRELEASE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@release.txt /entry:Release /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\clipboard\release.bin
