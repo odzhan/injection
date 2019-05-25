@@ -49,6 +49,11 @@
 #define SCAN_TYPE_TPP 0
 #define SCAN_TYPE_OLE 1
 #define SCAN_TYPE_RPC 2
+#define SCAN_TYPE_WIN 3
+#define SCAN_TYPE_DDE 4
+#define SCAN_TYPE_SVC 5
+#define SCAN_TYPE_WNF 6
+#define SCAN_TYPE_KCT 7
 
 // allocate memory
 LPVOID xmalloc (SIZE_T dwSize) {
@@ -485,6 +490,197 @@ VOID GetProcessOLEInfo(DWORD pid, BOOL symbol) {
     CloseHandle(hProcess);
 }
 
+// list ole data for a process
+VOID GetProcessKCT(DWORD pid, BOOL symbol) {
+    HANDLE                    hProcess;
+    DWORD                     i;
+    PROCESS_BASIC_INFORMATION pbi;
+    NTSTATUS                  status;
+    PEB                       peb;
+    SIZE_T                    rd;
+    PBYTE                     addr=NULL;
+    BYTE                      buffer[sizeof(SYMBOL_INFO)+MAX_SYM_NAME*sizeof(WCHAR)];
+    PSYMBOL_INFO              pSymbol=(PSYMBOL_INFO)buffer;
+    
+    // try open the process
+    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if(hProcess==NULL) {
+      wprintf(L"Unable to open %s:%lu\n", pid2name(pid), GetLastError());
+      return;
+    }
+    // if symbol is TRUE, try initialize 
+    if(symbol && !SymInitialize(hProcess, NULL, TRUE)) {
+      wprintf(L"Unable to initialze symbols for %s\n", pid2name(pid));
+      return;
+    }
+
+    status = NtQueryInformationProcess(hProcess, 
+      ProcessBasicInformation, &pbi, sizeof(pbi), NULL);
+      
+    if(NT_SUCCESS(status)) {
+      // try reading the PEB into local memory
+      if(ReadProcessMemory(hProcess, pbi.PebBaseAddress, &peb, sizeof(peb), &rd)) {
+        // does thread have an ole data?
+        if(peb.KernelCallbackTable != NULL) {
+          wprintf(L"\n");
+          wprintf(L"Process               : %s\n", pid2name(pid));
+          wprintf(L"PEB                   : %p\n", pbi.PebBaseAddress);
+          wprintf(L"KernelCallbackTable   : %p\n", peb.KernelCallbackTable);
+          
+          /**for(i=0; ; i++) {
+            pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+            pSymbol->MaxNameLen   = MAX_SYM_NAME;
+                        
+            if(SymFromAddr(hProcess, tpd.data[i], NULL, pSymbol)) {
+              if(pSymbol->Name[0] != L'_') break;
+              printf(": %s", pSymbol->Name);
+            }
+          }*/
+        }
+      }
+    }
+    if(symbol) SymCleanup(hProcess);
+    CloseHandle(hProcess);
+}
+
+// list ole data for a process
+VOID GetProcessDDE(DWORD pid, BOOL symbol) {
+    HANDLE                   hSnap, hProcess, hThread;
+    THREADENTRY32            te32;
+    DWORD                    i;
+    THREAD_BASIC_INFORMATION tbi;
+    NTSTATUS                 status;
+    TEB                      teb;
+    SIZE_T                   rd;
+    PBYTE                    addr=NULL;
+    BYTE                     buffer[sizeof(SYMBOL_INFO)+MAX_SYM_NAME*sizeof(WCHAR)];
+    PSYMBOL_INFO             pSymbol=(PSYMBOL_INFO)buffer;
+    WCHAR                    filename[MAX_PATH], perms[32];
+    MEMORY_BASIC_INFORMATION mbi;
+    SIZE_T                   res;
+    SOleTlsData2             oleinfo;
+    WCHAR                    cls[MAX_PATH];
+    
+    // try open the process
+    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if(hProcess==NULL) {
+      wprintf(L"Unable to open %s:%lu\n", pid2name(pid), GetLastError());
+      return;
+    }
+    // if symbol is TRUE, try initialize 
+    if(symbol && !SymInitialize(hProcess, NULL, TRUE)) {
+      wprintf(L"Unable to initialze symbols for %s\n", pid2name(pid));
+      return;
+    }
+    // create snapshot of system
+    hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
+    if(hSnap == INVALID_HANDLE_VALUE) return;
+    
+    te32.dwSize = sizeof(THREADENTRY32);
+
+    // get the first thread
+    if(Thread32First(hSnap, &te32)) {
+      do {
+        // does it match our process?
+        if(te32.th32OwnerProcessID == pid) {
+          // open the thread
+          hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te32.th32ThreadID);
+          if(hThread != NULL) {
+            // query the address of TEB
+            status = NtQueryInformationThread(hThread, 
+              ThreadBasicInformation, &tbi, sizeof(tbi), NULL);
+            if(NT_SUCCESS(status)) {
+              // try reading the TEB into local memory
+              if(ReadProcessMemory(hProcess, tbi.TebBaseAddress, &teb, sizeof(teb), &rd)) {
+                // does thread have an ole data?
+                if(teb.ReservedForOle != NULL) {
+                  
+                  if(ReadProcessMemory(hProcess, teb.ReservedForOle, &oleinfo, sizeof(oleinfo), &rd)) {
+                    addr = teb.ReservedForOle;
+                    
+                    if(oleinfo.hwndDdeServer != NULL ||
+                       oleinfo.hwndDdeClient != NULL) {
+                      wprintf(L"\n"
+                              L"Process          : %s:%lu\n", pid2name(pid), pid);
+                      wprintf(L"Thread ID        : %lu (0x%lx)\n", te32.th32ThreadID, te32.th32ThreadID);
+                      wprintf(L"TEB              : %p\n", tbi.TebBaseAddress);
+                      wprintf(L"ReservedForOle   : %p\n", teb.ReservedForOle);
+                      
+                      cls[0] = 0;
+                      GetClassName(oleinfo.hwndDdeClient, cls, ARRAYSIZE(cls));
+                      printf("Client HWND             : %p (%ws)\n", oleinfo.hwndDdeClient, cls);
+                      
+                      cls[0] = 0;
+                      GetClassName(oleinfo.hwndDdeClient, cls, ARRAYSIZE(cls));
+                      printf("Server HWND             : %p (%ws)\n", oleinfo.hwndDdeServer, cls);
+                    }
+    
+                  }
+                }
+              }
+            }
+            CloseHandle(hThread);
+          }
+        }
+      } while(Thread32Next(hSnap, &te32));
+    }
+    CloseHandle(hSnap);
+    if(symbol) SymCleanup(hProcess);
+    CloseHandle(hProcess);
+}
+
+// list windows for process
+BOOL CALLBACK EnumThreadWndProc(HWND hwnd, LPARAM lParam) {
+    WCHAR                    cls[MAX_PATH]; 
+    THREADENTRY32            *te32 = (THREADENTRY32*)lParam;
+    
+    GetClassName(hwnd, cls, MAX_PATH);
+    
+    printf("%-20ws:%i : %p : %ws\n", 
+      pid2name(te32->th32OwnerProcessID), 
+      te32->th32OwnerProcessID,
+      (LPVOID)hwnd, 
+      cls);
+    
+    return TRUE;
+}
+
+VOID GetProcessWindows(DWORD pid, BOOL symbol) {
+    HANDLE                   hSnap, hProcess, hThread;
+    THREADENTRY32            te32;
+    
+    // try open the process
+    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if(hProcess==NULL) {
+      wprintf(L"Unable to open %s:%lu\n", pid2name(pid), GetLastError());
+      return;
+    }
+    // if symbol is TRUE, try initialize 
+    if(symbol && !SymInitialize(hProcess, NULL, TRUE)) {
+      wprintf(L"Unable to initialze symbols for %s\n", pid2name(pid));
+      return;
+    }
+    // create snapshot of system
+    // 9D0BA50
+    hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, pid);
+    if(hSnap == INVALID_HANDLE_VALUE) return;
+    
+    te32.dwSize = sizeof(THREADENTRY32);
+
+    // get the first thread
+    if(Thread32First(hSnap, &te32)) {
+      do {
+        // does it match our process?
+        if(te32.th32OwnerProcessID == pid) {
+          EnumThreadWindows(te32.th32ThreadID, EnumThreadWndProc, &te32);
+        }
+      } while(Thread32Next(hSnap, &te32));
+    }
+    CloseHandle(hSnap);
+    if(symbol) SymCleanup(hProcess);
+    CloseHandle(hProcess);
+}
+
 // list thread pools for each process on a system
 VOID ScanSystem(DWORD pid, BOOL symbol, int type) {
     HANDLE         hSnap;
@@ -508,6 +704,12 @@ VOID ScanSystem(DWORD pid, BOOL symbol, int type) {
           GetProcessRPCInfo(pe32.th32ProcessID, symbol);
         } else if (type == SCAN_TYPE_OLE) {
           GetProcessOLEInfo(pe32.th32ProcessID, symbol);
+        } else if (type == SCAN_TYPE_WIN) {
+          GetProcessWindows(pe32.th32ProcessID, symbol);
+        } else if (type == SCAN_TYPE_DDE) {
+          GetProcessDDE(pe32.th32ProcessID, symbol);
+        } else if (type == SCAN_TYPE_KCT) {
+          GetProcessKCT(pe32.th32ProcessID, symbol);
         }
       } while(Process32Next(hSnap, &pe32));
     }
@@ -527,6 +729,9 @@ int main(void) {
         if(!lstrcmpi(L"ole", &argv[i][1])) { type = SCAN_TYPE_OLE; continue; }
         if(!lstrcmpi(L"rpc", &argv[i][1])) { type = SCAN_TYPE_RPC; continue; }
         if(!lstrcmpi(L"tpp", &argv[i][1])) { type = SCAN_TYPE_TPP; continue; }
+        if(!lstrcmpi(L"win", &argv[i][1])) { type = SCAN_TYPE_WIN; continue; }
+        if(!lstrcmpi(L"dde", &argv[i][1])) { type = SCAN_TYPE_DDE; continue; }
+        if(!lstrcmpi(L"kct", &argv[i][1])) { type = SCAN_TYPE_KCT; continue; }
         printf("unknown option : %ws\n", argv[i]);
         return -1;
       }
