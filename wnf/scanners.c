@@ -64,13 +64,17 @@ VOID ScanProcess(DWORD pid, LPWSTR name) {
         res = VirtualQueryEx(hProcess, addr, &mbi, sizeof(mbi));
         if(res != sizeof(mbi)) break;
         
-        if (mbi.Protect == PAGE_EXECUTE_READWRITE) {
+        if(mbi.Protect == PAGE_EXECUTE_READWRITE) {
           // do we have write access to this executable area of memory?
           if(WriteAccess(hProcess, mbi.BaseAddress)) {
             // show the process, address and size of cave
-            wprintf(L"%-20ws : %p : %zi\n", 
+            wprintf(L"RWX : %-20ws : %p : %zi\n", 
               name, mbi.BaseAddress, mbi.RegionSize);
           }
+        }
+        if(mbi.Type == MEM_IMAGE) {
+          wprintf(L"RX : %-20ws : %p : %zi\n", 
+            name, mbi.BaseAddress, mbi.RegionSize);          
         }
         addr = (PBYTE)mbi.BaseAddress + mbi.RegionSize;
       }

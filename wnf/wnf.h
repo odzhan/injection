@@ -275,8 +275,8 @@ typedef struct _CT_CONTEXT {
 } CT_CONTEXT, *PCT_CONTEXT;
 
 typedef struct _tagWnfName {
-    const char* Name;
-    ULONG64     StateName;
+    const WCHAR* Name;
+    ULONG64      StateName;
 } WnfName;
 
 #endif

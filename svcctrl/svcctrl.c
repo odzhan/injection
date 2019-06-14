@@ -132,6 +132,54 @@ VOID xstrerror (PWCHAR fmt, ...){
     }
 }
 
+DWORD name2pid(LPWSTR ImageName) {
+    HANDLE         hSnap;
+    PROCESSENTRY32 pe32;
+    DWORD          dwPid=0;
+    
+    // create snapshot of system
+    hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if(hSnap == INVALID_HANDLE_VALUE) return 0;
+    
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    // get first process
+    if(Process32First(hSnap, &pe32)){
+      do {
+        if (lstrcmpi(ImageName, pe32.szExeFile)==0) {
+          dwPid = pe32.th32ProcessID;
+          break;
+        }
+      } while(Process32Next(hSnap, &pe32));
+    }
+    CloseHandle(hSnap);
+    return dwPid;
+}
+
+PWCHAR pid2name(DWORD pid) {
+    HANDLE         hSnap;
+    BOOL           bResult;
+    PROCESSENTRY32 pe32;
+    PWCHAR         name=L"N/A";
+    
+    hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    
+    if (hSnap != INVALID_HANDLE_VALUE) {
+      pe32.dwSize = sizeof(PROCESSENTRY32);
+      
+      bResult = Process32First(hSnap, &pe32);
+      while (bResult) {
+        if (pe32.th32ProcessID == pid) {
+          name = pe32.szExeFile;
+          break;
+        }
+        bResult = Process32Next(hSnap, &pe32);
+      }
+      CloseHandle(hSnap);
+    }
+    return name;
+}
+
 // enable or disable a privilege in current process token
 BOOL SetPrivilege(PWCHAR szPrivilege, BOOL bEnable){
     HANDLE           hToken;
@@ -539,7 +587,17 @@ BOOL GetServiceIDE(PSERVICE_ENTRY ste) {
     BOOL                     bFound = FALSE;
     
     // get the name and id of process hosting service
-    if (!GetServiceInfo(ste)) return FALSE;
+    if (!GetServiceInfo(ste)) {
+      printf("Unable to obtain service information.\n");
+      ste->pid = name2pid(ste->service);
+      if(ste->pid == 0) {
+        ste->pid = _wtoi(ste->service);
+        if(ste->pid == 0) {
+          printf("Unable to obtain process id.\n");
+          return FALSE;
+        }
+      }
+    }
     
     wprintf(L"Process id for %s is %ld\n", ste->service, ste->pid);
     
@@ -616,7 +674,7 @@ int main(void) {
       // is this a switch?
       if(argv[i][0]==L'/' || argv[i][0]==L'-'){
         // check it out
-        switch(argv[i][1]){
+        switch(argv[i][1]) {
           case L'l':
             bAll=TRUE;
             break;
@@ -636,7 +694,7 @@ int main(void) {
             usage();
             break;
         }
-      } else if (service==NULL){
+      } else if (service==NULL) {
         service = argv[i];
       } else {
         usage();
@@ -644,9 +702,10 @@ int main(void) {
     }
     // if no service, display usage
     if (service == NULL) {
+      wprintf(L"[-] No service specified.\n");
       usage();
     }
-    
+      
     // if both inject and stop, throw an error
     if (bInject & bStop) {
       wprintf(L"[-] Injecting and stopping a service simultaneously isn't supported.\n");
