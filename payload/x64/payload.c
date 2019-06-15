@@ -92,6 +92,30 @@ VOID Release(VOID *This)
 VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance, 
   LPVOID Context, PTP_ALPC TpAlpc, LPVOID Reserved) 
 #endif
+
+#ifdef WNF
+typedef struct _WNF_STATE_NAME {
+    ULONG                             Data[2];
+} WNF_STATE_NAME, *PWNF_STATE_NAME;
+
+typedef const struct _WNF_STATE_NAME* PCWNF_STATE_NAME;
+
+typedef struct _WNF_TYPE_ID {
+    GUID                              TypeId;
+} WNF_TYPE_ID, *PWNF_TYPE_ID;
+
+typedef const WNF_TYPE_ID* PCWNF_TYPE_ID;
+
+typedef ULONG WNF_CHANGE_STAMP, *PWNF_CHANGE_STAMP;
+
+NTSTATUS WnfCallback (
+    WNF_STATE_NAME                    StateName,
+    WNF_CHANGE_STAMP                  ChangeStamp,
+    PWNF_TYPE_ID                      TypeId,
+    PVOID                             CallbackContext,
+    PVOID                             Buffer,
+    ULONG                             BufferSize)
+#endif
 {
     WinExec_t pWinExec;
     DWORD     szWinExec[2],

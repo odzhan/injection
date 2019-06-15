@@ -66,3 +66,8 @@ cl -DRELEASE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
 link /order:@release.txt /entry:Release /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
 xbin payload.exe .text
 move payload.exe64.bin ..\..\clipboard\release.bin
+echo.
+cl -DWNF -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@wnf.txt /entry:WnfCallback /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\wnf\payload.bin
