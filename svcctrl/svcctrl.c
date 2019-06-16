@@ -36,6 +36,7 @@
 #include <shlwapi.h>
 #include <Winternl.h>
 #include <psapi.h>
+#include <dbghelp.h>
 
 #define UNICODE
 #define _WIN32_DCOM
@@ -54,6 +55,10 @@
 #pragma comment(lib, "oleAut32.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shell32.lib")
+
+#pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "dbghelp.lib")
 
 typedef DWORD (WINAPI *RtlCreateUserThread_t)(
     IN HANDLE               ProcessHandle,
@@ -454,17 +459,64 @@ BOOL GetServiceInfo(PSERVICE_ENTRY ste) {
 
 // display values of the dispatch entry
 VOID DisplayIDE(PSERVICE_ENTRY ste) {
+    WCHAR         path[MAX_PATH];
+    BYTE          buffer[sizeof(SYMBOL_INFO)+MAX_SYM_NAME*sizeof(WCHAR)];
+    PSYMBOL_INFO  pSymbol=(PSYMBOL_INFO)buffer;
+    HANDLE        hp;
+    
+    hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ste->pid);
+    SymInitialize(hp, NULL, TRUE);
+    
     wprintf(L"ServiceName         : %p (%s)\n",  
       ste->ide.ServiceName, ste->svcName);
       
     wprintf(L"ServiceRealName     : %p (%s)\n",  
       ste->ide.ServiceRealName, ste->svcReal);
     
-    wprintf(L"ServiceStartRoutine : %p\n",  
-      ste->ide.ServiceStartRoutine);
+    ZeroMemory(path, ARRAYSIZE(path));
     
-    wprintf(L"ControlHandler      : %p\n",  
-      ste->ide.ControlHandler);
+    GetMappedFileName(hp, 
+      (LPVOID)ste->ide.ServiceStartRoutine, 
+      path, MAX_PATH);
+      
+    PathStripPath(path);
+    
+    wprintf(L"ServiceStartRoutine : %p : %s",  
+      ste->ide.ServiceStartRoutine, path);
+          
+    pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    pSymbol->MaxNameLen   = MAX_SYM_NAME;
+    
+    if(SymFromAddr(hp, 
+      (DWORD64)ste->ide.ServiceStartRoutine, 
+      NULL, pSymbol)) 
+    {
+      wprintf(L"!%hs", pSymbol->Name);
+    }
+    putchar('\n');
+    
+    // display ControlHandler
+    ZeroMemory(path, ARRAYSIZE(path));
+    
+    GetMappedFileName(hp, 
+      (LPVOID)ste->ide.ControlHandler, 
+      path, MAX_PATH);
+      
+    PathStripPath(path);
+    
+    wprintf(L"ControlHandler      : %p : %s",  
+      ste->ide.ControlHandler, path);
+    
+    pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    pSymbol->MaxNameLen   = MAX_SYM_NAME;
+    
+    if(SymFromAddr(hp, 
+      (DWORD64)ste->ide.ControlHandler, 
+      NULL, pSymbol)) 
+    {
+      wprintf(L"!%hs", pSymbol->Name);
+    }
+    putchar('\n');
     
     wprintf(L"StatusHandle        : %p\n",  
       ste->ide.StatusHandle);
@@ -478,6 +530,9 @@ VOID DisplayIDE(PSERVICE_ENTRY ste) {
     wprintf(L"MainThreadHandle    : %p (%d) (use with -t option)\n\n",
       (void*)ste->ide.MainThreadHandle, 
       (int)ste->ide.MainThreadHandle);
+      
+    SymCleanup(hp);
+    CloseHandle(hp);
 }
       
 // validates a windows service IDE
@@ -735,6 +790,9 @@ int main(void) {
       wprintf(L"[-] Unable to enable SeDebugPrivilege.\n");
       return 0;
     }
+    
+    SymSetOptions(SYMOPT_DEFERRED_LOADS);
+    
     ZeroMemory(&ste, sizeof(ste));    
     lstrcpyn(ste.service, service, MAX_PATH);
     

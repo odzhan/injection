@@ -229,10 +229,108 @@ VOID ScanProcess(PPROCESSENTRY32 pe32, ULONG64 stateName) {
     }
 }
 
+// Relative Virtual Address to Virtual Address
+#define RVA2VA(type, base, rva) (type)((ULONG_PTR) base + rva)
+
+// calculate the RVA of WNF sub table in NTDLL data section
+DWORD GetWnfSubTableRVA(VOID) {
+    LPVOID                   ntdll;
+    PIMAGE_DOS_HEADER        dos;
+    PIMAGE_NT_HEADERS        nt;
+    PIMAGE_SECTION_HEADER    sh;
+    DWORD                    i, j, res, rva = 0;
+    LPBYTE                   ds;
+    MEMORY_BASIC_INFORMATION mbi;
+    PWNF_SUBSCRIPTION_TABLE  tbl;
+    ULONG_PTR                ptr;
+    
+    // Storage Protection Windows Runtime automatically subscribes to WNF. 
+    // Loading efswrt.dll will create the table if not already initialized.
+    LoadLibrary(L"efswrt.dll");
+    // get local RVA of subscription table
+    ntdll = GetModuleHandle(L"ntdll.dll");
+
+    dos = (PIMAGE_DOS_HEADER)ntdll;  
+    nt  = RVA2VA(PIMAGE_NT_HEADERS, ntdll, dos->e_lfanew);  
+    sh  = (PIMAGE_SECTION_HEADER)((LPBYTE)&nt->OptionalHeader + 
+            nt->FileHeader.SizeOfOptionalHeader);
+             
+    // scan all writeable segments
+    for(i=0; i<nt->FileHeader.NumberOfSections && rva == 0; i++) {
+      // if this section is writeable, assume it's data
+      if (sh[i].Characteristics & IMAGE_SCN_MEM_WRITE) {
+        // scan section for pointers to the heap
+        ds = RVA2VA(PBYTE, ntdll, sh[i].VirtualAddress);
+         
+        for(j = 0; 
+            j < sh[i].Misc.VirtualSize - sizeof(ULONG_PTR); 
+            j += sizeof(ULONG_PTR)) 
+        {
+          // get pointer
+          ptr = *(ULONG_PTR*)&ds[j];
+          // query the memory
+          res = VirtualQuery((LPVOID)ptr, &mbi, sizeof(mbi));
+          if(res != sizeof(mbi)) continue;
+          
+          // if it's a pointer to heap or stack..
+          if ((mbi.State   == MEM_COMMIT    ) &&
+              (mbi.Type    == MEM_PRIVATE   ) && 
+              (mbi.Protect == PAGE_READWRITE))
+          {
+            tbl = (PWNF_SUBSCRIPTION_TABLE)ptr;
+            // if it looks like subscription table resides here
+            if(tbl->Header.NodeTypeCode == WNF_NODE_SUBSCRIPTION_TABLE && 
+               tbl->Header.NodeByteSize == sizeof(WNF_SUBSCRIPTION_TABLE)) 
+            {
+              // save the Relative Virtual Address
+              rva = (DWORD)(sh[i].VirtualAddress + j);
+              break;
+            }
+          }
+        }
+      }
+    }
+    return rva;
+}
+
+LPVOID GetModuleHandleRemote(DWORD pid, LPCWSTR lpModuleName) {
+    HANDLE        ss;
+    MODULEENTRY32 me;
+    LPVOID        ba = NULL;
+    
+    ss = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+    if(ss == INVALID_HANDLE_VALUE) return NULL;
+    
+    me.dwSize = sizeof(MODULEENTRY32);
+    
+    if(Module32First(ss, &me)) {
+      do {
+        if(me.th32ProcessID == pid) {
+          if(lstrcmpi(me.szModule, lpModuleName)==0) {
+            ba = me.modBaseAddr;
+            break;
+          }
+        }
+      } while(Module32Next(ss, &me));
+    }
+    CloseHandle(ss);
+    return ba;
+}
+
 VOID ScanSystem(DWORD pid, ULONG64 stateName) {
     HANDLE         hSnap;
     PROCESSENTRY32 pe32;
-    BOOL           bFound=FALSE;
+    DWORD          rva=0;
+    LPBYTE         ntdll;
+    HANDLE         hp;
+    ULONG_PTR      ptr;
+    SIZE_T         rd;
+    
+    rva = GetWnfSubTableRVA();
+    
+    if(rva == 0) {
+      wprintf(L"WARNING: Unable to resolve address of WNF Subscription table. Scanning will take much longer.\n");
+    }
     
     hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if(hSnap == INVALID_HANDLE_VALUE) return;
@@ -242,7 +340,31 @@ VOID ScanSystem(DWORD pid, ULONG64 stateName) {
     if(Process32First(hSnap, &pe32)){
       do {
         if(pid != 0 && pe32.th32ProcessID != pid) continue;
-        ScanProcess(&pe32, stateName);
+        
+        if(rva == 0) {
+          ScanProcess(&pe32, stateName);
+        } else {
+          hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID);
+          if(hp != NULL) {
+            SymInitialize(hp, NULL, TRUE);
+            ntdll = GetModuleHandleRemote(pe32.th32ProcessID, L"ntdll.dll");
+            if(ntdll != NULL) {
+              // read the heap pointer from remote process
+              ReadProcessMemory(
+                hp, (PBYTE)ntdll + rva, &ptr,
+                sizeof(ULONG_PTR), &rd);
+          
+              // read a user subscription from remote
+              DumpWnfTable(hp, (LPVOID)ptr, &pe32, stateName);
+            } else {
+              wprintf(L"Unable to resolve address of NTDLL.dll\n");
+            }
+            SymCleanup(hp);
+            CloseHandle(hp);
+          } else {
+            xstrerror(pe32.szExeFile);
+          }
+        }
       } while(Process32Next(hSnap, &pe32));
     }
     CloseHandle(hSnap);
@@ -257,7 +379,7 @@ int wmain(int argc, WCHAR *argv[]) {
     int     i;
     WCHAR   *name = NULL, *process = NULL;
     ULONG64 stateName = 0;
-    DWORD   pid;
+    DWORD   pid = 0;
     
     for(i=1; i<=argc-1; i++) {
       // is this a switch?
@@ -280,7 +402,7 @@ int wmain(int argc, WCHAR *argv[]) {
     // scan process? get the pid
     if(process != NULL) {
       pid = name2pid(process);
-      if(pid == 0) pid = _wtoi(process);
+      if(pid == 0) pid = wcstoull(process, NULL, 10);
       if(pid == 0) {
         wprintf(L"ERROR: unable to resolve pid for \"%s\".\n", process);
         return -1;
@@ -304,6 +426,7 @@ int wmain(int argc, WCHAR *argv[]) {
     }
     SymSetOptions(SYMOPT_DEFERRED_LOADS);
     // scan process
+    wprintf(L"Scanning %s\n", pid==0 ? L"all" : process);
     ScanSystem(pid, stateName);
     return 0;
 }
