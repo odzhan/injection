@@ -1,0 +1,4 @@
+WnfCallback
+FindExport
+xGetProcAddress
+xstrcmp
