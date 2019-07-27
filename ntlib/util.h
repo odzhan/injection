@@ -34,13 +34,17 @@
 #pragma warning(disable : 4311)
 
 #define UNICODE
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#include <iphlpapi.h>
 #include <tlhelp32.h>
 #include <psapi.h>
 #include <shlwapi.h>
-#include <stdio.h>
 #include <dbghelp.h>
 #include <richedit.h>
+
+#include <stdio.h>
 
 #include "../NTlib/nttpp.h"
 
@@ -49,6 +53,8 @@
 #pragma comment(lib, "winspool.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "dbghelp.lib")
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "ole32.lib")
 
 // allocate memory
 LPVOID xmalloc (SIZE_T dwSize) {

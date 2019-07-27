@@ -93,6 +93,18 @@ VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance,
   LPVOID Context, PTP_ALPC TpAlpc, LPVOID Reserved) 
 #endif
 
+#ifdef WINSOCK
+INT WSHGetSocketInformation(
+    PVOID  HelperDllSocketContext,
+    SOCKET SocketHandle,
+    HANDLE TdiAddressObjectHandle,
+    HANDLE TdiConnectionObjectHandle,
+    INT    Level,
+    INT    OptionName,
+    PCHAR  OptionValue,
+    INT    OptionLength)
+#endif
+
 #ifdef WNF
 typedef struct _WNF_STATE_NAME {
     ULONG                             Data[2];
