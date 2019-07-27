@@ -192,7 +192,7 @@ BOOL AddProcessToList(WSHINFO *wsh, DWORD id, DWORD addr, DWORD port) {
         break;
       }
     }
-    // if not found, add new entry
+    // if found, add port + addr
     if(pe != NULL) {
       pe->ports[pe->cnt] = port;
       pe->addrs[pe->cnt] = addr;
@@ -201,7 +201,7 @@ BOOL AddProcessToList(WSHINFO *wsh, DWORD id, DWORD addr, DWORD port) {
       return TRUE;
     }
     pe = &wsh->plist[wsh->cnt];
-    // set pid, name and base of  
+    // set pid, process name and base of mswsock.dll
     pe->id  = id;
     pe->cnt = 1;
     pe->ports[0] = port;
