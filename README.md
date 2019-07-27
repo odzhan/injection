@@ -12,5 +12,6 @@
 <li><a href="https://modexp.wordpress.com/2019/05/24/4066/">CLIPBRDWNDCLASS</a></li>
 <li><a href="https://modexp.wordpress.com/2019/04/25/seven-window-injection-methods/">WordWarping, Hyphentension, AutoCourgette, Streamception, Oleum, ListPlanting, Treepoline</a></li>
 <li><a href="https://modexp.wordpress.com/2019/06/15/4083/">Windows Notification Facility</a></li>
+<li><a href="https://modexp.wordpress.com/2019/07/27/process-injection-winsock/">Windows Sockets Helper Functions</a></li>
 </ul>
 
