@@ -602,7 +602,7 @@ void usage(void) {
 }
 
 int wmain(int argc, WCHAR *argv[]) {
-    DWORD   i, j, len, cnt, pid = 0;
+    DWORD   i, j, len, cnt, pid = 0, port = 0;
     WSHINFO wsh;
     LPVOID  payload;
     
@@ -629,7 +629,7 @@ int wmain(int argc, WCHAR *argv[]) {
         }
         putchar('\n');
       }
-    } else if(argc == 2 || argc == 3) {
+    } else if(argc == 2 || argc == 4) {
       pid = name2pid(argv[1]);
       if(pid == 0) pid = wcstoull(argv[1], NULL, 10);
       if(pid == 0) {
@@ -646,11 +646,12 @@ int wmain(int argc, WCHAR *argv[]) {
         if(len == 0) {
           printf("Unable to read %ws.\n", argv[2]);
         } else {
-          inject(pid, 49668, payload, len);
+          port = wcstoull(argv[3], NULL, 10);
+          inject(pid, port, payload, len);
         }
       }
     } else {
-      printf("\nusage: wsh <process> <payload>\n");
+      printf("\nusage: wsh <process> <payload> <port>\n");
     }
     return 0;
 }
