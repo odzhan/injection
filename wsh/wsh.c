@@ -380,7 +380,7 @@ VOID ListWSHX(DWORD pid) {
       printf("MaxSockaddrLength       : %i\n",   hdi.MaxSockaddrLength);
       printf("MinTdiAddressLength     : %i\n",   hdi.MinTdiAddressLength);
       printf("MaxTdiAddressLength     : %i\n",   hdi.MaxTdiAddressLength);
-      printf("UseDelayedAcceptance    : %llX\n", hdi.UseDelayedAcceptance);
+      printf("UseDelayedAcceptance    : %lx\n", hdi.UseDelayedAcceptance);
       printf("Mapping                 : %p\n",   (LPVOID)hdi.Mapping);
       
       if(StringFromGUID2(&hdi.ProviderGUID, guid, MAX_PATH)) {

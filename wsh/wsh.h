@@ -93,13 +93,13 @@ typedef INT (WINAPI *PWSH_STRING_TO_ADDRESS)(LPWSTR, DWORD, LPWSAPROTOCOL_INFOW,
 
 typedef struct _WINSOCK_HELPER_DLL_INFO {
     LIST_ENTRY                  HelperDllListEntry;
-    DWORD                       Unknown;
+    INT                         Unknown;
     HANDLE                      DllHandle;
     INT                         MinSockaddrLength;
     INT                         MaxSockaddrLength;
     INT                         MinTdiAddressLength;
     INT                         MaxTdiAddressLength;
-    ULONG64                     UseDelayedAcceptance;
+    INT                         UseDelayedAcceptance;
     PWINSOCK_MAPPING            Mapping;
     GUID                        ProviderGUID;
     PWSH_OPEN_SOCKET            WSHOpenSocket;
