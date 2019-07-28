@@ -34,6 +34,7 @@
 #include <windows.h>
 #include <iphlpapi.h>
 #include <tlhelp32.h>
+#include <versionhelpers.h>
 
 #include "../ntlib/util.h"
 #include "wsh.h"
@@ -603,16 +604,36 @@ void usage(void) {
     exit(0);
 }
 
+DWORD _RtlGetVersion(void) {
+    NTSTATUS(WINAPI *RtlGetVersion)(LPOSVERSIONINFOEXW);
+    OSVERSIONINFOEXW osvi;
+    DWORD            ver = 0;
+
+    *(FARPROC*)&RtlGetVersion = GetProcAddress(GetModuleHandle(L"ntdll"), "RtlGetVersion");
+
+    if (NULL != RtlGetVersion) {
+      osvi.dwOSVersionInfoSize = sizeof(osvi);
+      RtlGetVersion(&osvi);
+      ver = osvi.dwMajorVersion;
+    }
+    return ver;
+}
+
 int wmain(int argc, WCHAR *argv[]) {
-    DWORD   i, j, len, cnt, pid = 0, port = 0;
-    WSHINFO wsh;
-    LPVOID  payload;
+    DWORD         i, j, len, cnt, pid = 0, port = 0;
+    WSHINFO       wsh;
+    LPVOID        payload;
+    
+    if(_RtlGetVersion() != 10) {
+      printf("\nWARNING: PoC only tested on Windows 10!\n");
+      return 0;
+    }
     
     memset(&wsh, 0, sizeof(wsh));
     
     // try enable debug privilege
     if(!SetPrivilege(SE_DEBUG_NAME, TRUE)) {
-      wprintf(L"WARNING: could not enable debugging privilege.\n");
+      printf("WARNING: could not enable debugging privilege.\n");
     }
       
     // if no parameters, list all available processes
