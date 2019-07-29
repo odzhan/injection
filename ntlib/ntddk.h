@@ -55,6 +55,14 @@ typedef long NTSTATUS;
 //------------------------------------------------------------------------------
 // Structures
 
+#ifndef _MSC_VER
+typedef struct _PROCESSOR_NUMBER {
+  WORD Group;
+  BYTE Number;
+  BYTE Reserved;
+} PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
+#endif
+
 typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO {
     USHORT UniqueProcessId;
     USHORT CreatorBackTraceIndex;

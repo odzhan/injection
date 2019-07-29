@@ -45,6 +45,8 @@
 #include <richedit.h>
 
 #include <stdio.h>
+#include <stddef.h>
+#include <wchar.h>
 
 #include "../NTlib/nttpp.h"
 
