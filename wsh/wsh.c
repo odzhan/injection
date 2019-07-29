@@ -660,8 +660,8 @@ int main(void) {
     WSHINFO       wsh;
     LPVOID        payload;
     int           argc;
-	wchar_t       **argv;
-	
+    wchar_t       **argv;
+  
     if(_RtlGetVersion() != 10) {
       printf("\nWARNING: PoC only tested on Windows 10!\n");
     }
@@ -673,8 +673,8 @@ int main(void) {
       printf("WARNING: could not enable debugging privilege.\n");
     }
     
-	argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	
+    argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  
     // if no parameters, list all available processes
     if(argc == 1) {
       ListTransports();
