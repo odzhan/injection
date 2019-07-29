@@ -147,21 +147,18 @@ DWORD GetSockHelperDllListHeadRVA(VOID) {
       le = RVA2VA(PULONG_PTR, m, sh[i].VirtualAddress);
          
       for(j=0; j<(sh[i].Misc.VirtualSize/sizeof(ULONG_PTR)); j++) {
-        // skip if not a pointer to heap memory
-        if(!IsHeapPtr((LPVOID)le[j])) continue;
-          
         PLIST_ENTRY list = (PLIST_ENTRY)&le[j];
         
-        // skip if not equal
+        // skip it not equal
         if(list->Flink != list->Blink) continue;
         
-        // skip if list doesn't contain pointers to heap
+        // skip if not heap
         if(!IsHeapPtr(list->Flink) && !IsHeapPtr(list->Blink)) continue;
         
         // assume it's a winsock helpder dll info structure
         hdi = (PWINSOCK_HELPER_DLL_INFO)list->Flink;
         
-        // check if heap/code pointers
+        // if heap/code pointers are present
         if(IsHeapPtr(hdi->Mapping)        &&
            IsCodePtr(hdi->WSHOpenSocket)  && 
            IsCodePtr(hdi->WSHOpenSocket2) &&
