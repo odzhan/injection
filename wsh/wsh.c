@@ -470,8 +470,9 @@ VOID ListTransports(VOID) {
       // read the value of Transports subkey
       tplen = MAX_PATH;
       ls = RegQueryValueEx(hk, L"Transports", NULL, NULL, (LPBYTE)tp, &tplen);
+      
+      RegCloseKey(hk);
     }
-    RegCloseKey(hk);
     
     // if we were able to read something
     if(tp[0] != 0) {
