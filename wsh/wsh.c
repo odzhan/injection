@@ -273,19 +273,21 @@ DWORD GetProcessList(PWSHINFO wsh, BOOL bOpen) {
     if(err == NO_ERROR) {
       // for each entry
       for(i=0; i<tbl->dwNumEntries; i++) {
-        // try open process for reading+writing VM
-        if(bOpen) {
-          hp = OpenProcess(PROCESS_ALL_ACCESS, 
-            FALSE, tbl->table[i].dwOwningPid);
-          CloseHandle(hp);
-          if(hp == NULL) continue;
+        if(tbl->table[i].dwLocalAddr == INADDR_ANY) {
+          // try open process for reading+writing VM
+          if(bOpen) {
+            hp = OpenProcess(PROCESS_ALL_ACCESS, 
+              FALSE, tbl->table[i].dwOwningPid);
+            CloseHandle(hp);
+            if(hp == NULL) continue;
+          }
+          // add this process or port to list
+          AddProcessToList(
+            wsh, 
+            tbl->table[i].dwOwningPid, 
+            tbl->table[i].dwLocalAddr, 
+            tbl->table[i].dwLocalPort);
         }
-        // add this process or port to list
-        AddProcessToList(
-          wsh, 
-          tbl->table[i].dwOwningPid, 
-          tbl->table[i].dwLocalAddr, 
-          tbl->table[i].dwLocalPort);
       }
     }
     return wsh->cnt;
@@ -398,7 +400,7 @@ VOID ListWSHX(DWORD pid) {
       printf("MaxSockaddrLength       : %i\n",   hdi.MaxSockaddrLength);
       printf("MinTdiAddressLength     : %i\n",   hdi.MinTdiAddressLength);
       printf("MaxTdiAddressLength     : %i\n",   hdi.MaxTdiAddressLength);
-      printf("UseDelayedAcceptance    : %llX\n", hdi.UseDelayedAcceptance);
+      printf("UseDelayedAcceptance    : %lX\n",  hdi.UseDelayedAcceptance);
       printf("Mapping                 : %p\n",   (LPVOID)hdi.Mapping);
       
       if(StringFromGUID2(&hdi.ProviderGUID, guid, MAX_PATH)) {
