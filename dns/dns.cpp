@@ -209,7 +209,6 @@ VOID SuppressErrors(LPVOID lpParameter) {
       hw = FindWindowEx(NULL, NULL, NULL, L"Network Error");
       if(hw != NULL) {
         PostMessage(hw, WM_CLOSE, 0, 0);
-        break;
       }
     }
 }
