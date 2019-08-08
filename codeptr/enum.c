@@ -41,7 +41,7 @@
 // Relative Virtual Address to Virtual Address
 #define RVA2VA(type, base, rva) (type)((ULONG_PTR) base + rva)
 
-// returns TRUE if ptr is RX code
+// does the pointer reside in the .code section?
 BOOL IsCodePtrEx(HANDLE hp, LPVOID ptr) {
     MEMORY_BASIC_INFORMATION mbi;
     DWORD                    res;
@@ -55,6 +55,136 @@ BOOL IsCodePtrEx(HANDLE hp, LPVOID ptr) {
     return ((mbi.State   == MEM_COMMIT    ) &&
             (mbi.Type    == MEM_IMAGE     ) && 
             (mbi.Protect == PAGE_EXECUTE_READ));
+}
+
+// does pointer reside on the stack or heap?
+BOOL IsHeapPtrEx(HANDLE hp, LPVOID ptr) {
+    MEMORY_BASIC_INFORMATION mbi;
+    DWORD                    res;
+    
+    if(ptr == NULL) return FALSE;
+    
+    // query the pointer
+    res = VirtualQueryEx(hp, ptr, &mbi, sizeof(mbi));
+    if(res != sizeof(mbi)) return FALSE;
+
+    return ((mbi.State   == MEM_COMMIT    ) &&
+            (mbi.Type    == MEM_PRIVATE   ) && 
+            (mbi.Protect == PAGE_READWRITE));
+}
+
+// does pointer reside in the .data section?
+BOOL IsDataPtrEx(HANDLE hp, LPVOID ptr) {
+    MEMORY_BASIC_INFORMATION mbi;
+    DWORD                    res;
+    
+    if(ptr == NULL) return FALSE;
+    
+    // query the pointer
+    res = VirtualQueryEx(hp, ptr, &mbi, sizeof(mbi));
+    if(res != sizeof(mbi)) return FALSE;
+
+    return ((mbi.State   == MEM_COMMIT    ) &&
+            (mbi.Type    == MEM_IMAGE     ) && 
+            (mbi.Protect == PAGE_READWRITE));
+}
+
+#include "mpr.h"
+#include "npapi.h"
+#include "mprdata.h"
+
+BOOL ValidateMPR(HANDLE hp, LPVOID cs) {
+    PROVIDER prov;
+    SIZE_T   rd;
+    
+    // read provider
+    if(!ReadProcessMemory(hp, cs, &prov, 
+      sizeof(prov), &rd)) return FALSE;
+    
+    // valid scope?
+    switch(prov.Resource.dwScope) {
+      case RESOURCE_CONNECTED :
+      case RESOURCE_GLOBALNET :
+      case RESOURCE_CONTEXT   :
+        break;
+      default:
+        return FALSE;
+    }
+    
+    /// valid type?
+    switch(prov.Resource.dwType) {
+      case RESOURCETYPE_DISK  :
+      case RESOURCETYPE_PRINT :
+      case RESOURCETYPE_ANY   :
+        break;
+      default:
+        return FALSE;
+    }    
+
+    // valid display type?
+    switch(prov.Resource.dwDisplayType) {
+      case RESOURCEDISPLAYTYPE_NETWORK   :
+      case RESOURCEDISPLAYTYPE_DOMAIN    :
+      case RESOURCEDISPLAYTYPE_SERVER    :
+      case RESOURCEDISPLAYTYPE_SHARE     :
+      case RESOURCEDISPLAYTYPE_DIRECTORY :
+      case RESOURCEDISPLAYTYPE_GENERIC   :
+        break;
+      default:
+        return FALSE;
+    }
+    
+    // if not empty, make sure it's the heap
+    if(prov.Resource.lpLocalName != NULL) {
+      if(!IsHeapPtrEx(hp, prov.Resource.lpLocalName)) 
+        return FALSE;
+    }
+    
+    if(prov.Resource.lpRemoteName != NULL) {
+      if(!IsHeapPtrEx(hp, prov.Resource.lpRemoteName)) 
+        return FALSE;
+    }
+    
+    if(prov.Resource.lpComment != NULL) {
+      if(!IsHeapPtrEx(hp, prov.Resource.lpComment)) 
+        return FALSE;
+    }
+    
+    if(prov.Resource.lpProvider != NULL) {
+      if(!IsHeapPtrEx(hp, prov.Resource.lpProvider)) 
+        return FALSE;
+    }
+    
+    // ensure at least one function points to code
+    if(!IsCodePtrEx(hp, prov.AddConnection)) 
+      return FALSE;
+    
+    return TRUE;
+}
+
+LPVOID GetRemoteModuleHandle(DWORD pid, LPCWSTR lpModuleName) {
+    HANDLE        ss;
+    MODULEENTRY32 me;
+    LPVOID        ba = NULL;
+    
+    ss = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+    
+    if(ss == INVALID_HANDLE_VALUE) return NULL;
+    
+    me.dwSize = sizeof(MODULEENTRY32);
+    
+    if(Module32First(ss, &me)) {
+      do {
+        if(me.th32ProcessID == pid) {
+          if(lstrcmpi(me.szModule, lpModuleName)==0) {
+            ba = me.modBaseAddr;
+            break;
+          }
+        }
+      } while(Module32Next(ss, &me));
+    }
+    CloseHandle(ss);
+    return ba;
 }
 
 // resolve symbol for addr without using SymFromName
@@ -83,6 +213,13 @@ PWCHAR addr2sym(HANDLE hp, LPVOID addr) {
     return name;
 }
 
+#define UNICODE
+#define SECURITY_WIN32
+
+#include <schannel.h>
+#include <security.h>
+#include <sspi.h>
+
 DWORD ListCodePtr(HANDLE hp, PWCHAR dll, PLDR_DATA_TABLE_ENTRY dte) {
     WCHAR                 path[MAX_PATH];
     SIZE_T                rd;
@@ -91,14 +228,14 @@ DWORD ListCodePtr(HANDLE hp, PWCHAR dll, PLDR_DATA_TABLE_ENTRY dte) {
     PIMAGE_NT_HEADERS     nt;
     PIMAGE_SECTION_HEADER sh;
     DWORD                 i, ptrs=0, cnt, rva=0;
-    PULONG_PTR            ds;
+    PULONG_PTR            ds, ptr;
     BOOL                  bRead;
+    SecurityFunctionTableW sspi;
     
     if(ReadProcessMemory(hp, dte->FullDllName.Buffer, path, MAX_PATH, &rd)) {
       // if DLL specified and this doesn't match ours, return
       if(dll != NULL && StrStrI(path, dll) == NULL) return 0;
       
-      printf("%ws\n", path);
       m = GetModuleHandle(path);
       if(m == NULL) {
         m = LoadLibrary(path);
@@ -124,15 +261,27 @@ DWORD ListCodePtr(HANDLE hp, PWCHAR dll, PLDR_DATA_TABLE_ENTRY dte) {
       // for each pointer
       for(ptrs=i=0; i<cnt; i++) {
         // read a pointer
+        //printf("Reading %p\n", &ds[i]);
         bRead = ReadProcessMemory(hp, &ds[i], &cs, sizeof(ULONG_PTR), &rd);
         if(!bRead) break;
         if(cs == NULL) continue;
         
         // code pointer?
-        if(IsCodePtrEx(hp, cs)) {
+        if(IsHeapPtrEx(hp, cs)) {
           ptrs++;
-          printf("    %p => ", &ds[i]);
-          printf("%p : %ws\n", cs, addr2sym(hp, cs));
+         // printf("Reading SSPI structure from %p.\n", cs);
+          ReadProcessMemory(hp, cs, &sspi, sizeof(sspi), &rd);
+          //printf("Checking %p\n", sspi.EnumerateSecurityPackagesW);
+          if(IsCodePtrEx(hp, sspi.EnumerateSecurityPackagesW)  &&
+             IsCodePtrEx(hp, sspi.QueryCredentialsAttributesW) &&
+             IsCodePtrEx(hp, sspi.AcquireCredentialsHandleW))
+          {
+         // if(ValidateMPR(hp, cs)) {
+            printf("%ws\n", path);
+            printf("    %p => ", &ds[i]);
+            printf("%p : %ws\n", cs, addr2sym(hp, cs));
+         // }
+          }
         }
       }
     }
@@ -219,11 +368,21 @@ VOID ScanProcess(DWORD pid, PWCHAR dll) {
     CloseHandle(hs);
 }
 
+void SSPIGetRVA(void) {
+    HMODULE m = LoadLibrary(L"sspicli");
+    
+    
+}
+
+#include <knownfolders.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+
 int main(void) {
     DWORD   i, j, len, cnt, pid = 0;
     LPVOID  payload;
     int     argc;
-    wchar_t **argv, *dll = NULL;
+    wchar_t **argv, *process = NULL, *dll = NULL;
 
     // try enable debug privilege
     if(!SetPrivilege(SE_DEBUG_NAME, TRUE)) {
@@ -232,14 +391,26 @@ int main(void) {
     
     argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     
-    if(argc >= 2) {
-      dll = argv[1];
+    for(i=1; i<argc; i++) {
+      if(argv[i][0]=='/' || argv[i][0]=='-') {
+        switch(argv[i][1]) {
+          case L'm':
+            dll = argv[++i];
+            break;
+          default:
+            printf("unknown switch : %c\n", argv[i][1]);
+            break;
+        }
+      } else {
+        process = argv[i];
+      }
     }
-    if(argc >= 3) {
-      pid = name2pid(argv[2]);
-      if(pid == 0) pid = wcstoull(argv[2], NULL, 10);
+
+    if(process != NULL) {
+      pid = name2pid(process);
+      if(pid == 0) pid = wcstoull(process, NULL, 10);
       if(pid == 0) {
-        printf("ERROR: unable to resolve pid for \"%ws\".\n", argv[2]);
+        printf("ERROR: unable to resolve pid for \"%ws\".\n", process);
         return -1;
       }
     }

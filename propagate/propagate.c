@@ -103,6 +103,7 @@ VOID propagate(LPVOID payload, DWORD payloadSize) {
     // 3. Obtain the handle of subclass header
     p = GetProp(cwh, L"UxSubclassInfo");
 
+    // GetProcessHandleFromHwnd
     // 4. Obtain the process id for the explorer.exe
     GetWindowThreadProcessId(cwh, &id);
 

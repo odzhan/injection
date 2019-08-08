@@ -43,6 +43,7 @@
 #include <shlwapi.h>
 #include <dbghelp.h>
 #include <richedit.h>
+#include <shlobj.h>
 
 #include <stdio.h>
 #include <stddef.h>
@@ -57,6 +58,11 @@
 #pragma comment(lib, "dbghelp.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "oleaut32.lib")
+
+// Relative Virtual Address to Virtual Address
+#define RVA2VA(type, base, rva) (type)((ULONG_PTR) base + rva)
 
 // allocate memory
 LPVOID xmalloc (SIZE_T dwSize) {
