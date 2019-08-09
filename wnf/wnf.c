@@ -167,7 +167,7 @@ LPVOID GetUserSubFromProcessOld(
     return sa;
 }
 
-LPVOID GetModuleHandleRemote(DWORD pid, LPCWSTR lpModuleName) {
+LPVOID GetRemoteModuleHandle(DWORD pid, LPCWSTR lpModuleName) {
     HANDLE        ss;
     MODULEENTRY32 me;
     LPVOID        ba = NULL;
@@ -192,17 +192,33 @@ LPVOID GetModuleHandleRemote(DWORD pid, LPCWSTR lpModuleName) {
     return ba;
 }
 
+// does the pointer reside in the .code section?
+BOOL IsHeapPtr(LPVOID ptr) {
+    MEMORY_BASIC_INFORMATION mbi;
+    DWORD                    res;
+    
+    if(ptr == NULL) return FALSE;
+    
+    // query the pointer
+    res = VirtualQuery(ptr, &mbi, sizeof(mbi));
+    if(res != sizeof(mbi)) return FALSE;
+
+    return ((mbi.State   == MEM_COMMIT    ) &&
+            (mbi.Type    == MEM_PRIVATE   ) && 
+            (mbi.Protect == PAGE_READWRITE));
+}
+
 // Relative Virtual Address to Virtual Address
 #define RVA2VA(type, base, rva) (type)((ULONG_PTR) base + rva)
 
 LPVOID GetUserSubFromProcess(
   HANDLE hp, DWORD pid, PWNF_USER_SUBSCRIPTION us, ULONG64 sn)
 {
-    LPVOID                   ntdll, sa = NULL;
+    LPVOID                   m, rm, va = NULL, sa = NULL;
     PIMAGE_DOS_HEADER        dos;
     PIMAGE_NT_HEADERS        nt;
     PIMAGE_SECTION_HEADER    sh;
-    DWORD                    i, j, res, rva = 0;
+    DWORD                    i, cnt;
     PULONG_PTR               ds;
     ULONG_PTR                ptr;
     MEMORY_BASIC_INFORMATION mbi;
@@ -217,57 +233,45 @@ LPVOID GetUserSubFromProcess(
     // Read pointer to heap in remote process.
     // Finally, read a user subscription
     LoadLibrary(L"efswrt.dll");
-    // get local RVA of subscription table
-    ntdll = GetModuleHandle(L"ntdll.dll");
 
-    dos = (PIMAGE_DOS_HEADER)ntdll;  
-    nt  = RVA2VA(PIMAGE_NT_HEADERS, ntdll, dos->e_lfanew);  
+    // get base of ntdll.dll in remote process
+    rm  = GetRemoteModuleHandle(pid, L"ntdll.dll");
+    
+    // load local copy
+    m   = LoadLibrary(L"ntdll.dll");
+    dos = (PIMAGE_DOS_HEADER)m;  
+    nt  = RVA2VA(PIMAGE_NT_HEADERS, m, dos->e_lfanew);  
     sh  = (PIMAGE_SECTION_HEADER)((LPBYTE)&nt->OptionalHeader + 
-            nt->FileHeader.SizeOfOptionalHeader);
-             
-    // scan all writeable segments
-    for(i=0; i<nt->FileHeader.NumberOfSections && rva == 0; i++) {
-      // if this section is writeable, assume it's data
-      if (sh[i].Characteristics & IMAGE_SCN_MEM_WRITE) {
-        // scan section for pointers to the heap
-        ds = RVA2VA(PULONG_PTR, ntdll, sh[i].VirtualAddress);
-         
-        for(j=0; j<(sh[i].Misc.VirtualSize/sizeof(ULONG_PTR)); j++) {
-          // query the pointer value
-          res = VirtualQuery((LPVOID)ds[j], &mbi, sizeof(mbi));
-          if(res != sizeof(mbi)) continue;
+          nt->FileHeader.SizeOfOptionalHeader);
           
-          // if it's a pointer to heap or stack..
-          if ((mbi.State   == MEM_COMMIT    ) &&
-              (mbi.Type    == MEM_PRIVATE   ) && 
-              (mbi.Protect == PAGE_READWRITE))
-          {
-            tbl = (PWNF_SUBSCRIPTION_TABLE)ds[j];
-            // if it looks like subscription table resides here
-            if(tbl->Header.NodeTypeCode == WNF_NODE_SUBSCRIPTION_TABLE && 
-               tbl->Header.NodeByteSize == sizeof(WNF_SUBSCRIPTION_TABLE)) 
-            {
-              // save the Relative Virtual Address
-              rva = (DWORD)(sh[i].VirtualAddress + j * sizeof(ULONG_PTR));
-              break;
-            }
-          }
-        }
+    // locate the .data segment, save VA and number of pointers
+    for(i=0; i<nt->FileHeader.NumberOfSections; i++) {
+      if(*(PDWORD)sh[i].Name == *(PDWORD)".data") {
+        ds  = RVA2VA(PULONG_PTR, m, sh[i].VirtualAddress);
+        cnt = sh[i].Misc.VirtualSize / sizeof(ULONG_PTR);
+        break;
       }
     }
-    // we found table locally?
-    if(rva != 0) {
-      // get base address of NTDLL in remote process
-      ntdll = GetModuleHandleRemote(pid, L"ntdll.dll");
-      if(ntdll != NULL) {
-        // read the heap pointer from remote process
-        ReadProcessMemory(
-          hp, (PBYTE)ntdll + rva, &ptr,
-          sizeof(ULONG_PTR), &rd);
+    // for each pointer
+    for(i=0; i<cnt; i++) {
+      if(!IsHeapPtr((LPVOID)ds[i])) continue;
+      
+      tbl = (PWNF_SUBSCRIPTION_TABLE)ds[i];
+      // if it looks like subscription table resides here
+      if(tbl->Header.NodeTypeCode == WNF_NODE_SUBSCRIPTION_TABLE && 
+         tbl->Header.NodeByteSize == sizeof(WNF_SUBSCRIPTION_TABLE)) 
+      {
+        // save the virtual address
+        va = ((PBYTE)&ds[i] - (PBYTE)m) + (PBYTE)rm;
+        break;
+      }
+    }
+    if(va != NULL) {
+      ReadProcessMemory(
+        hp, va, &ptr, sizeof(ULONG_PTR), &rd);
           
         // read a user subscription from remote
         sa = GetUserSubFromTable(hp, (LPVOID)ptr, us, sn);
-      }
     }
     return sa;
 }
