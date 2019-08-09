@@ -105,6 +105,18 @@ INT WSHGetSocketInformation(
     INT    OptionLength)
 #endif
 
+#ifdef DDE
+HDDEDATA DDECallback(
+  UINT wType,
+  UINT wFmt,
+  HCONV hConv,
+  HSZ hsz1,
+  HSZ hsz2,
+  HDDEDATA hData,
+  ULONG_PTR dwData1,
+  ULONG_PTR dwData2)
+#endif
+
 #ifdef WNF
 typedef struct _WNF_STATE_NAME {
     ULONG                             Data[2];
