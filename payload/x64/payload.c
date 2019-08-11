@@ -88,6 +88,10 @@ HWND GetWindowHandle(VOID)
 VOID Release(VOID *This)
 #endif
 
+#ifdef QUERYINTERFACE
+VOID QueryInterface(REFIID riid, void **ppvObject)
+#endif
+
 #ifdef ALPC          // Advanced Local Procedure Call (ALPC)
 VOID TpAlpcCallBack(PTP_CALLBACK_INSTANCE Instance, 
   LPVOID Context, PTP_ALPC TpAlpc, LPVOID Reserved) 
@@ -179,7 +183,7 @@ NTSTATUS WnfCallback (
       return (DWORD)~0UL;
     #endif
     
-    #if !defined(ALPC) && !defined(HYPHENATE) && !defined(RELEASE)
+    #if !defined(ALPC) && !defined(HYPHENATE) && !defined(RELEASE) && !defined(QUERYINTERFACE)
       return 0;
     #endif
 }

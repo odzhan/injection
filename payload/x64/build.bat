@@ -66,6 +66,7 @@ cl -DRELEASE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
 link /order:@release.txt /entry:Release /fixed payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
 xbin payload.exe .text
 move payload.exe64.bin ..\..\clipboard\release.bin
+move payload.exe64.bin ..\..\tooltip\release.bin
 echo.
 cl -DWNF -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
 link /order:@wnf.txt /entry:WnfCallback /fixed payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
@@ -81,3 +82,8 @@ cl -DDDE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
 link /order:@dde.txt /entry:DDECallback /fixed payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
 xbin payload.exe .text
 move payload.exe64.bin ..\..\dde\payload.bin
+echo.
+cl -DQUERYINTERFACE -c -nologo -Os -O2 -Gm- -GR- -EHa -Oi -GS- payload.c
+link /order:@queryinterface.txt /entry:QueryInterface /fixed payload.obj -subsystem:console -nodefaultlib -stack:0x100000,0x100000
+xbin payload.exe .text
+move payload.exe64.bin ..\..\tooltip\queryinterface.bin

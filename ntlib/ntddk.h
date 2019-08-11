@@ -3999,7 +3999,16 @@ ZwCreateSection(
     IN  HANDLE FileHandle OPTIONAL
     );
 
+NTSYSAPI NTSTATUS NTAPI ZwCreateDirectoryObject(
+  PHANDLE            DirectoryHandle,
+  ACCESS_MASK        DesiredAccess,
+  POBJECT_ATTRIBUTES ObjectAttributes);
 
+NTSYSAPI NTSTATUS NTAPI NtCreateDirectoryObject(
+  PHANDLE            DirectoryHandle,
+  ACCESS_MASK        DesiredAccess,
+  POBJECT_ATTRIBUTES ObjectAttributes);
+  
 NTSYSAPI
 NTSTATUS
 NTAPI

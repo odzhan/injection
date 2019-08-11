@@ -192,7 +192,7 @@ int main(void) {
     // assume it's a string name for process or process id
     if(process!=NULL) {
       pid=name2pid(process);
-      if(pid==0) pid=_wtoi(process);
+      if(pid==0) pid=wcstoull(process, NULL, 10);
       if(pid==0) { 
         usage();
       }
