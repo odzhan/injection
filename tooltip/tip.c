@@ -35,7 +35,7 @@ typedef struct _IUnknown_VFT {
     LPVOID AddRef;
     LPVOID Release;
     
-    // CToolTipMgr
+    // CToolTipsMgr
     LPVOID ptrs[128];
 } IUnknown_VFT;
 

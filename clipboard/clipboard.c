@@ -27,11 +27,7 @@
   ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE. */
   
-#define UNICODE
-#include <windows.h>
-#include <stdio.h>
-#pragma comment(lib, "user32.lib")
-#pragma comment(lib, "shell32.lib")
+#include "../ntlib/util.h"
 
 // fake interface
 typedef struct _IUnknown_t {
@@ -79,27 +75,24 @@ VOID clipboard(LPVOID payload, DWORD payloadSize) {
     VirtualFreeEx(hp, ds, 0, MEM_DECOMMIT | MEM_RELEASE);
     CloseHandle(hp);
 }
+
+// GetWindowModuleFileName doesn't always work for window handles
+
+VOID list_clipboards(VOID) {
+  HWND  hw = NULL;
+  DWORD pid;
   
-DWORD readpic(PWCHAR path, LPVOID *pic){
-    HANDLE hf;
-    DWORD  len,rd=0;
-
-    // 1. open the file
-    hf=CreateFile(path, GENERIC_READ, 0, 0,
-      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    if(hf!=INVALID_HANDLE_VALUE){
-      // get file size
-      len=GetFileSize(hf, 0);
-      // allocate memory
-      *pic=malloc(len + 16);
-      // read file contents into memory
-      ReadFile(hf, *pic, len, &rd, 0);
-      CloseHandle(hf);
-    }
-    return rd;
+  printf("%-16s %-5s Process\n", "HWND", "PID");
+  printf("*****************************************\n");
+  
+  for(;;) {
+    hw = FindWindowEx(HWND_MESSAGE, hw, L"CLIPBRDWNDCLASS", NULL);
+    if(hw == NULL) break;
+    GetWindowThreadProcessId(hw, &pid);
+    printf("%p %-5i %ws\n", (LPVOID)hw, pid, pid2name(pid));
+  }
 }
-  
+
 int main(void){
     LPVOID pic;
     DWORD  len;
@@ -108,8 +101,11 @@ int main(void){
 
     argv=CommandLineToArgvW(GetCommandLine(), &argc);
 
-    if(argc!=2){printf("usage: clipboard <payload>\n");return 0;}
-
+    if(argc != 2) {
+      list_clipboards();
+      printf("\nusage: clipboard <payload>\n");
+      return 0;
+    }
     len=readpic(argv[1], &pic);
     if (len==0) { printf("invalid payload\n"); return 0;}
 
