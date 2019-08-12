@@ -13,5 +13,10 @@
 <li><a href="https://modexp.wordpress.com/2019/04/25/seven-window-injection-methods/">WordWarping, Hyphentension, AutoCourgette, Streamception, Oleum, ListPlanting, Treepoline</a></li>
 <li><a href="https://modexp.wordpress.com/2019/06/15/4083/">Windows Notification Facility</a></li>
 <li><a href="https://modexp.wordpress.com/2019/07/27/process-injection-winsock/">Windows Sockets Helper Functions</a></li>
+<li><a href="https://modexp.wordpress.com/2019/08/05/windows-process-injection-scn/">Multiple Provider Router (MPR) DLL and Shell Notifications</a></li>
+<li><a href="https://modexp.wordpress.com/2019/08/08/windows-process-injection-dnsapi/">DNS Client API</a></li>
+<li><a href="https://modexp.wordpress.com/2019/08/09/windows-process-injection-breaking-badder/">Breaking BaDDEr</a></li>
+<li><a href="https://modexp.wordpress.com/2019/08/10/windows-process-injection-tooltip-controls/">Tooltip or Common Controls</a></li>
+<li><a href="https://modexp.wordpress.com/2019/08/12/windows-process-injection-knowndlls/">KnownDlls Cache Poisoning</a></li>
 </ul>
 
