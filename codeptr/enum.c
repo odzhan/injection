@@ -231,6 +231,10 @@ DWORD ListCodePtr(HANDLE hp, PWCHAR dll, PLDR_DATA_TABLE_ENTRY dte) {
     PULONG_PTR            ds, ptr;
     BOOL                  bRead;
     SecurityFunctionTableW sspi;
+    NTSTATUS               nts;
+    HANDLE                 obj;
+    BYTE                       buf[1024];
+    POBJECT_NAME_INFORMATION   name = (POBJECT_NAME_INFORMATION)buf;
     
     if(ReadProcessMemory(hp, dte->FullDllName.Buffer, path, MAX_PATH, &rd)) {
       // if DLL specified and this doesn't match ours, return
@@ -264,9 +268,28 @@ DWORD ListCodePtr(HANDLE hp, PWCHAR dll, PLDR_DATA_TABLE_ENTRY dte) {
         //printf("Reading %p\n", &ds[i]);
         bRead = ReadProcessMemory(hp, &ds[i], &cs, sizeof(ULONG_PTR), &rd);
         if(!bRead) break;
-        if(cs == NULL) continue;
+        if(cs == NULL || ((ULONG64)cs % 4)) continue;
         
-        // code pointer?
+        nts = NtDuplicateObject(
+            hp, (HANDLE)cs, 
+            GetCurrentProcess(), &obj, 0, FALSE, 
+            DUPLICATE_SAME_ACCESS);
+            
+        if(NT_SUCCESS(nts)) {
+          // query the name
+          NtQueryObject(
+            obj, ObjectNameInformation, 
+            name, MAX_PATH, NULL);
+            
+          // if name returned.. 
+          if(name->Name.Length != 0) {
+            // is it knowndlls directory?
+            printf("%lx : %ws\n", cs, name->Name.Buffer);
+          }
+        
+          NtClose(obj);
+        }
+        /** code pointer?
         if(IsHeapPtrEx(hp, cs)) {
           ptrs++;
          // printf("Reading SSPI structure from %p.\n", cs);
@@ -282,7 +305,7 @@ DWORD ListCodePtr(HANDLE hp, PWCHAR dll, PLDR_DATA_TABLE_ENTRY dte) {
             printf("%p : %ws\n", cs, addr2sym(hp, cs));
          // }
           }
-        }
+        }*/
       }
     }
     return ptrs;
