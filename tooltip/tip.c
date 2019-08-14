@@ -227,7 +227,7 @@ int main(void) {
       comctrl_inject(pic, len);
     } else {
       printf("unable to read from %ws\n", argv[1]);
-      commctrl_list(argv[1]);
+      comctrl_list(argv[1]);
     }
     return 0;
 }
