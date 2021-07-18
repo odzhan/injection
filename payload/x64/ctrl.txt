@@ -1,0 +1,4 @@
+HandlerRoutine
+FindExport
+xGetProcAddress
+xstrcmp

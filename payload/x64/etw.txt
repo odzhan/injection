@@ -1,0 +1,4 @@
+EtwEnableCallback
+FindExport
+xGetProcAddress
+xstrcmp

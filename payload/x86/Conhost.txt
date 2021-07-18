@@ -1,0 +1,4 @@
+GetWindowHandle
+FindExport
+xGetProcAddress
+xstrcmp

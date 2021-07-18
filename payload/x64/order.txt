@@ -1,0 +1,4 @@
+entrypoint
+FindExport
+xGetProcAddress
+xstrcmp
